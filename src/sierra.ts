@@ -176,13 +176,24 @@ export interface Sierra {
    * - **사람이 관리한다.** 에셋 풀 화면이 태그로 목록을 그리므로 봇이 쌓은 것을 보고 지운다.
    * - **에셋을 지우면 그것을 붙인 옛 글의 그림도 사라진다**(코어 44 확정 1·3).
    *
-   * **`groups_read`는 정할 수 없다** — 올린 사람(봇)의 `groups`가 자동으로 찍히고 고치는
-   * 일은 관리자의 것이다(37 확정 4). 봇이 정하는 것은 이름과 태그뿐이다.
+   * **라벨(`groups_read`·`groups_write`)은 올리는 자리가 정한다** — 고치는 일은 관리자의
+   * 것이고(37 확정 4) 봇이 값으로 넘길 수는 없다. 대신 **어디에 올릴지로 고른다**:
+   *
+   * | `document` | 라벨 | 태그 |
+   * |---|---|---|
+   * | 없다(에셋 풀) | **올린 사람의 `groups` 전부** | 준 `tag` 하나 |
+   * | 있다(그 문서) | 그 문서 사슬에서 **가장 깊은 `groups_read`** | 그 문서 사슬의 태그(준 `tag`는 무시된다) |
+   *
+   * 봇이 여러 그룹에 들어 있으면 풀로 올린 에셋은 **그 그룹이 전부 찍혀 넓어진다** — 쓰기
+   * 권한 때문에 든 그룹(루트의 `편집자` 같은)까지 라벨이 되기 때문이다. 좁히려면 그 라벨만
+   * 붙은 문서를 두고 거기로 올린다.
+   *
+   * **문서로 올리면 그 문서의 쓰기 사슬을 지나야 한다**(조상을 포함한다 — 38 확정 9).
    *
    * **확장이 없는 시에라에서는 404다** — 부르는 쪽이 미디어 직접 올리기로 물러선다.
    */
   uploadAsset(
-    bytes: Uint8Array, mime: string, name: string, tag?: string,
+    bytes: Uint8Array, mime: string, name: string, tag?: string, document?: string,
   ): Promise<{ readonly id: string }>;
 
   /**
@@ -326,13 +337,16 @@ export class SierraClient implements Sierra {
   }
 
   async uploadAsset(
-    bytes: Uint8Array, mime: string, name: string, tag?: string,
+    bytes: Uint8Array, mime: string, name: string, tag?: string, document?: string,
   ): Promise<{ readonly id: string }> {
     const form = new FormData();
     form.set('file', new Blob([bytes], { type: mime }), name);
     form.set('name', name);
     if (tag !== undefined && tag !== '') {
       form.set('tag', tag);
+    }
+    if (document !== undefined && document !== '') {
+      form.set('document', document);
     }
 
     const response = await fetch(`${this.config.origin}/api/v1/assets`, {
