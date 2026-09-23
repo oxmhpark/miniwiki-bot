@@ -53,3 +53,16 @@ git fetch upstream && git merge upstream/main
 ```
 
 포크가 `PROJECT.md`와 `src/main.ts`와 그 아래만 고치면 이 병합은 깨끗하다.
+
+**받지 않은 포크는 조용히 뒤처진다** — 아무것도 깨지지 않으므로 다음에 열어 보기 전까지
+아무도 모른다. 그래서 **모체에 순회가 있다**(`../check-forks.sh`):
+
+```sh
+./check-forks.sh           # 각 포크가 몇 커밋 뒤인지 본다
+./check-forks.sh --merge   # 받아서 검사까지 돌린다
+```
+
+**병합이 깨끗해도 검사는 깨질 수 있다.** 템플릿이 `BotContext`에 필드를 더하면 포크의 *가짜
+컨텍스트*가 타입에서 걸린다 — 2026-09-23에 에코가 `connectLink`에서 그랬다. 그래서 받은
+뒤에는 **반드시 검사를 돌린다**(`npm run typecheck && npm test`). 그것이 이 순회가
+`git merge` 한 줄로 끝나지 않는 까닭이다.
