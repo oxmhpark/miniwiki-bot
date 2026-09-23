@@ -206,6 +206,17 @@ export class FileStore {
     await writeJson(this.cursorPath(botId), { id });
   }
 
+  /**
+   * 커서를 지운다 — **처음부터 다시 읽는다**.
+   *
+   * 봇이 무엇을 담을지 정하는 규칙이 바뀌었을 때 드는 자리다(에코의 풀 그룹). 규칙만 고치면
+   * *이미 읽은 것*은 커서 뒤에 남아 영영 다시 보지 않으므로, 고친 규칙이 옛 것에도 듣게
+   * 하려면 커서를 물러야 한다.
+   */
+  async clearCursor(botId: string): Promise<void> {
+    await rm(this.cursorPath(botId), { force: true });
+  }
+
   // ── 봇마다의 포크 상태 ──────────────────────────────────────────────────
 
   /**
