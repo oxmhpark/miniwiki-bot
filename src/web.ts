@@ -3,11 +3,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { GithubApp } from './auth.js';
 import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
+import type { BotIntake, ConnectTicket } from './intake.js';
+import { renderIntake } from './intake.js';
 import { declarationChanged, manifestOf } from './manifest.js';
 import type { BotTab } from './pages.js';
 import {
-  advancedTab, authTab, deletePage, featuresTab, homePage, landingPage, newBotPage, noRoomPage,
-  profileTab, stopPage,
+  advancedTab, authTab, deletePage, featuresTab, guestPage, homePage, landingPage, newBotPage,
+  noRoomPage, profileTab, stopPage,
 } from './pages.js';
 import { renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
@@ -47,6 +49,8 @@ import { Tickets } from './tickets.js';
  * GET  /bots/{id}/delete         지우기 전에 한 번 보인다
  * POST /bots/{id}/delete         **지운다** — 이 서비스의 것까지다
  * GET  /bots/{id}/manifest.json  **공개** — 코어가 읽는다
+ * GET  /connect/{티켓}            **말 거는 사람의 자리** — 봇에게 무언가를 맡긴다
+ * POST /connect/{티켓}            맡는다 — **티켓은 여기서 탄다**
  * POST /bots/{id}/x/{무엇}       포크의 칸
  * ```
  */
@@ -72,6 +76,10 @@ export interface WebOptions {
   readonly about: string;
   /** 포크가 봇 화면에 더하는 칸 — 없으면 템플릿의 것만 선다. */
   readonly panel?: BotPanel;
+  /** 말 거는 사람이 무언가를 맡기는 자리 — 없으면 `/connect`가 404다. */
+  readonly intake?: BotIntake;
+  /** 연결 링크의 표 — **봇이 내고 여기가 받는다**. `service.ts`가 둘에 같은 것을 준다. */
+  readonly tickets: Tickets<ConnectTicket>;
   readonly log: (line: string) => void;
 }
 
@@ -114,6 +122,18 @@ async function handle(
 
     const body = JSON.stringify(manifestOf(bot, options.codeVersion, options.scopes), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);
+    return;
+  }
+
+  /*
+   * ── **말 거는 사람의 자리** ───────────────────────────────────────────────
+   *
+   * **로그인 앞에 선다.** 여기 오는 사람은 이 서비스의 계정이 없고, 가진 것은 봇이 메시지로
+   * 보낸 링크 하나다 — 그 티켓이 곧 신원이라 쿠키를 묻지 않는다(`intake.ts`).
+   */
+  const linked = /^\/connect\/([A-Za-z0-9_-]{8,128})$/.exec(path);
+  if (linked !== null && (request.method === 'GET' || request.method === 'POST')) {
+    await intakeRoute(request, response, options, linked[1] ?? '');
     return;
   }
 
@@ -248,6 +268,57 @@ async function handle(
   }
 
   send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/bots', '내 봇들'));
+}
+
+/**
+ * **맡기러 온 사람** — 폼을 그리고, 받는다.
+ *
+ * **티켓은 성공했을 때만 탄다.** 한 번 잘못 붙였다고 링크를 다시 받게 하면, 그 사람은 봇에게
+ * 다시 말을 걸어야 하고 공개 쓰레드에 같은 말이 한 번 더 선다.
+ *
+ * **지난 링크와 없는 링크를 가르지 않는다** — 둘 다 *다시 말을 걸어 달라*로 끝난다. 가르면
+ * 남의 티켓을 두드려 *있다/없다*를 읽을 수 있다.
+ */
+async function intakeRoute(
+  request: IncomingMessage, response: ServerResponse, options: WebOptions, token: string,
+): Promise<void> {
+  const ticket = options.tickets.peek(token);
+  const bot = ticket === undefined ? undefined : await options.store.bot(ticket.botId);
+
+  if (ticket === undefined || bot === undefined || options.intake === undefined) {
+    send(response, 404, guestPage('연결', '지난 링크입니다', `
+      <p>이 링크는 15분만 삽니다. 봇에게 다시 말을 걸면 새 링크를 보냅니다.</p>`));
+    return;
+  }
+
+  const who = { id: ticket.userId, handle: ticket.handle };
+  const ctx = options.fleet.contextOf(bot);
+
+  if (request.method === 'POST') {
+    let line: string;
+
+    try {
+      line = await options.intake.save(await readForm(request), who, bot, ctx);
+    } catch (error) {
+      // **티켓은 산다** — 적은 것이 틀렸다고 링크까지 죽이지 않는다.
+      const again = await options.intake.describe(who, bot, ctx);
+      send(response, 400, guestPage(bot.declaration.name, again.title,
+        renderIntake(again, token), (error as Error).message));
+      return;
+    }
+
+    options.tickets.take(token);
+    options.log(`봇 ${bot.id}에 @${who.handle}이(가) 맡겼다`);
+
+    send(response, 200, guestPage(bot.declaration.name, '맡았습니다', `
+      <p>${escapeHtml(line)}</p>
+      <p>이제 ${escapeHtml(bot.handle === undefined ? bot.declaration.name : `@${bot.handle}`)}에게
+         다시 말을 걸면 됩니다. 이 링크는 여기서 끝납니다.</p>`));
+    return;
+  }
+
+  const view = await options.intake.describe(who, bot, ctx);
+  send(response, 200, guestPage(bot.declaration.name, view.title, renderIntake(view, token)));
 }
 
 /** 봇 하나에 하는 일들 — 주소의 끝 한 마디가 무엇을 할지 정한다. */

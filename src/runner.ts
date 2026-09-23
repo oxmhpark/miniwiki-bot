@@ -1,8 +1,10 @@
 import type { Sealer } from './crypto.js';
+import type { ConnectTicket, IntakeWho } from './intake.js';
 import type { Notification, Sierra } from './sierra.js';
 import { SierraClient, SierraError } from './sierra.js';
 import type { BotRecord, FileStore } from './state.js';
 import { isRunnable } from './state.js';
+import type { Tickets } from './tickets.js';
 
 /**
  * 봇 하나를 돌리는 자리 — **봇마다 자기 시계로 돈다**.
@@ -23,6 +25,17 @@ export interface BotContext {
   readonly sealer: Sealer;
   /** 사람이 브라우저로 닿는 이 서비스의 주소 — 연결 링크가 여기서 난다. */
   readonly publicOrigin: string;
+
+  /**
+   * **그 사람에게 보낼 연결 링크** — `/connect/{티켓}`의 온전한 주소다(`intake.ts`).
+   *
+   * 부를 때마다 새 티켓이 난다(15분). 링크에 실린 것은 *어느 봇의 누구인가*이고, 그것이
+   * 곧 그 사람의 신원이다 — **말 거는 사람은 이 서비스의 계정을 만들지 않는다.**
+   *
+   * 포크가 `intake`를 주지 않았으면 링크를 내도 그 자리는 404다 — 부르기 전에 자기 봇이
+   * 무엇을 청하는지 알고 있어야 한다.
+   */
+  readonly connectLink: (who: IntakeWho) => string;
   /** **읽고 부르되 쓰지 않는다.** */
   readonly dryRun: boolean;
   readonly log: (line: string) => void;
@@ -150,6 +163,13 @@ export interface FleetOptions {
   readonly log: (line: string) => void;
   /** 봇 하나의 머리를 짓는다 — **포크한 봇이 여기에 자기 것을 준다**. */
   readonly brain: (bot: BotRecord) => BotBrain;
+
+  /**
+   * 연결 링크의 표 — **화면과 같은 것을 쥔다**.
+   *
+   * 여기서 낸 티켓을 `/connect`가 받는다. 표가 둘이면 봇이 보낸 링크를 화면이 모른다.
+   */
+  readonly tickets: Tickets<ConnectTicket>;
 }
 
 /**
@@ -214,6 +234,8 @@ export class Fleet {
       store: this.options.store,
       sealer: this.options.sealer,
       publicOrigin: this.options.publicOrigin,
+      connectLink: (who) => `${this.options.publicOrigin}/connect/${
+        this.options.tickets.issue({ botId: bot.id, userId: who.id, handle: who.handle })}`,
       dryRun: this.options.dryRun,
       log: this.options.log,
     };

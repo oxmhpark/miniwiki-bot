@@ -409,6 +409,24 @@ export function deletePage(bot: BotRecord): string {
     </form>`);
 }
 
+/**
+ * **말 거는 사람의 자리**(`/connect/{티켓}`) — 로그인 밖이다.
+ *
+ * 이 화면을 보는 사람은 **이 서비스의 계정이 없고 만들지도 않는다**. 그래서 제목줄 오른쪽의
+ * 드나드는 단추가 서지 않고(`나가기`는 남의 자리로 보낸다), 돌아갈 곳도 없다 — 그 사람이
+ * 돌아가는 곳은 시에라이지 여기가 아니다.
+ *
+ * 제목줄에 서는 것은 **그 봇의 이름**이다. 서비스의 이름이 아니다: 그 사람이 말을 건 상대는
+ * 봇이고, 봇이 어느 서비스 위에 도는지는 그 사람의 관심이 아니다.
+ */
+export function guestPage(botName: string, title: string, body: string, line?: string): string {
+  return page(escapeHtml(botName), `
+    ${top(escapeHtml(botName), '')}
+    <h2>${escapeHtml(title)}</h2>
+    ${said(line)}
+    ${body}`);
+}
+
 /** 막힌 자리 — 어디로 돌아갈지가 늘 함께 선다. */
 export function stopPage(title: string, body: string, back: string, word = '돌아가기'): string {
   return page(title, `

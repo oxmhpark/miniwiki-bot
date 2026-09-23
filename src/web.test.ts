@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { Sealer } from './crypto.js';
+import type { BotIntake, ConnectTicket } from './intake.js';
 import { Fleet } from './runner.js';
 import { FileStore } from './state.js';
+import { Tickets } from './tickets.js';
 import { createWebServer } from './web.js';
 
 /**
@@ -19,8 +21,33 @@ import { createWebServer } from './web.js';
 
 const GITHUB = { id: 4242, login: '옥수박' };
 
+/** 말 거는 사람 — **시에라의 id는 GUID다**(`state.ts`가 모양을 본다). */
+const TALKER = '01a0b7c8-ce1c-7655-8154-874313000001';
+
+/** 가짜 포크 — **무언가를 청하는 봇**의 자리. 한 칸을 받아 봉해 둔다. */
+const intake: BotIntake = {
+  describe: async (who) => ({
+    title: '열쇠 맡기기',
+    intro: [`@${who.handle}, 열쇠 하나가 듭니다.`],
+    fields: [{ type: 'secret', name: 'key', label: '열쇠', hint: 'sk-…' }],
+  }),
+  save: async (values, who, bot, ctx) => {
+    const key = (values.get('key') ?? '').trim();
+    if (key === '') {
+      throw new Error('열쇠가 있어야 합니다.');
+    }
+
+    await ctx.store.saveUser(bot.id, {
+      id: who.id, handle: who.handle, data: { sealed: ctx.sealer.seal(key) },
+    });
+
+    return '열쇠를 맡았습니다.';
+  },
+};
+
 let dir: string;
 let store: FileStore;
+let tickets: Tickets<ConnectTicket>;
 let server: Server;
 let origin: string;
 let original: typeof globalThis.fetch;
@@ -30,9 +57,10 @@ beforeEach(async () => {
   store = new FileStore(dir);
 
   const sealer = new Sealer('0123456789abcdef0123');
+  tickets = new Tickets<ConnectTicket>();
   const fleet = new Fleet({
     store, sealer, publicOrigin: 'https://bots.example', dryRun: true, pollMs: 1000,
-    log: () => undefined, brain: () => ({ tick: async () => 0 }),
+    log: () => undefined, brain: () => ({ tick: async () => 0 }), tickets,
   });
 
   server = createWebServer({
@@ -44,6 +72,8 @@ beforeEach(async () => {
     scopes: ['read:posts'],
     serviceName: '에코',
     about: '<h2>소개</h2><p>맡긴 메시지를 옮겨 적습니다.</p>',
+    intake,
+    tickets,
     log: () => undefined,
   });
 
@@ -346,4 +376,55 @@ test('로그인하지 않은 사람은 봇 자리에 못 든다 — 선언만 �
 
   expect(manifest.version).toBe('0.1.0+1');
   expect(manifest.name).toBe('에코');
+});
+
+/**
+ * **맡기러 오는 사람의 전 구간** — 로그인 없이, 링크 하나로.
+ *
+ * 봇이 낸 링크(`ctx.connectLink`)와 화면이 받는 자리가 **같은 표를 쥐는지**가 여기서 선다.
+ * 둘이 갈리면 방금 보낸 링크를 화면이 모르고, 그 사실은 사람이 링크를 열어야 드러난다.
+ */
+test('말 거는 사람은 링크 하나로 맡긴다 — 티켓은 성공했을 때만 탄다', async () => {
+  const owner = await signIn();
+  const id = await makeBot(owner);
+
+  const token = tickets.issue({ botId: id, userId: TALKER, handle: '말건이' });
+  const nobody = new Browser(origin);
+
+  // **로그인 밖이다** — 쿠키 없이 폼이 선다.
+  const form = await nobody.get(`/connect/${token}`);
+  expect(form.status).toBe(200);
+
+  const html = await form.text();
+  expect(html).toContain('열쇠 맡기기');
+  expect(html).toContain('@말건이');
+  // 비밀은 `password` 칸으로 서고 값을 싣지 않는다.
+  expect(html).toContain('type="password"');
+  expect(html).not.toContain('나가기');
+
+  // **틀리면 티켓은 산다** — 다시 적게 하고 링크를 죽이지 않는다.
+  const empty = await nobody.post(`/connect/${token}`, { key: '' });
+  expect(empty.status).toBe(400);
+  expect(await empty.text()).toContain('열쇠가 있어야 합니다');
+  expect(tickets.peek(token)).toBeDefined();
+
+  const done = await nobody.post(`/connect/${token}`, { key: 'sk-abc' });
+  expect(done.status).toBe(200);
+  expect(await done.text()).toContain('열쇠를 맡았습니다');
+
+  // 맡은 것은 **그 봇 아래** 그 사람의 자리에 있고, 봉해져 있다.
+  const saved = await store.user<{ readonly sealed: string }>(id, TALKER);
+  expect(saved?.handle).toBe('말건이');
+  expect(saved?.data.sealed).not.toContain('sk-abc');
+
+  // **한 번뿐이다.**
+  expect((await nobody.get(`/connect/${token}`)).status).toBe(404);
+});
+
+test('지난 링크와 없는 링크를 가르지 않는다', async () => {
+  const nobody = new Browser(origin);
+
+  const gone = await nobody.get('/connect/aaaaaaaaaaaaaaaa');
+  expect(gone.status).toBe(404);
+  expect(await gone.text()).toContain('다시 말을 걸면');
 });
