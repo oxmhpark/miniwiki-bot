@@ -50,4 +50,5 @@ class MyBrain implements BotBrain {
 await startService({ brain: () => new MyBrain(), codeVersion: '0.1.0' });
 ```
 
-포크와 템플릿 갱신을 받는 법은 `PROJECT.md`의 *포크하는 법*에 있다.
+포크와 템플릿 갱신을 받는 법은 [`.claude/PROJECT.md`](./.claude/PROJECT.md)의 *포크하는 법*에 있고,
+봇 일반의 설계는 [`.claude/BOT.md`](./.claude/BOT.md)에 있다.
