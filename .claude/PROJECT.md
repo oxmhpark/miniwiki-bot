@@ -89,6 +89,7 @@ export interface BotBrain {
 | `auth.ts` | 템플릿 | GitHub 왕복 |
 | `manifest.ts` | 템플릿 | 봇마다의 선언과 판 |
 | `runner.ts` | 템플릿 | 봇 하나의 루프(`BotRunner`)와 서 있는 봇들(`Fleet`) |
+| `state.ts`의 `botData<T>` | 템플릿이 자리, **포크가 모양** | `bots/{botId}/data.json` — 커서 말고 그 봇이 남길 것 |
 | `web.ts` | 템플릿 | 가입·봇 만들기·자격 증명·선언 |
 | `service.ts` | 템플릿 | 이 전부를 세우는 `startService` |
 | `text.ts` | 템플릿 | 멘션 무력화·자르기·HTML 이스케이프 |
@@ -113,12 +114,28 @@ export interface BotBrain {
 | 들어오는 것 | `GET /api/v1/notifications?min_id=…&limit=40`. 스트리밍·웹훅은 없다 |
 | 글의 id | 알림의 `href`(`/@아이디/{id}`) 끝 — 알림에 글 객체가 없다 |
 | 쓰레드 | `GET /api/v1/posts/{id}/context` — 평평한 목록, `in_reply_to`로 사슬을 짠다 |
+| 메시지함 | `GET /api/v1/messages?since_id=…` — **알림과 달리 `since_id`가 있다**(알림에는 `max_id`뿐이라 *새것만*을 물을 수 없다) |
+| 한 사람 | `GET /api/v1/accounts/{id}` — **그룹을 아는 유일한 자리** |
+| 공개 글 | `POST /api/v1/posts` `{body, visibility}`. `public`은 **코어에 없는 이름**이다 |
+| 내 마지막 글 | `GET /api/v1/accounts/{나}/posts?limit=1` — `read:feeds`가 든다(계정의 글은 *목록*의 권한을 탄다) |
 | 답글 | `POST /api/v1/posts` `{body, in_reply_to}` — **`visibility`·`recipients`를 싣지 않는다**(뿌리를 상속한다, M25) |
 | 메시지 | 같은 엔드포인트에 `recipients: ["아이디"]` |
 | 나 · 한도 | `verify_credentials` · 익명 `GET /api/v1/instance`의 `post.max_length` |
 
 **`min_id`는 오래된 쪽부터 채우고 최신 순으로 돌려준다**(`CursorQuery`). 그래서 뒤집어 처리하고
 커서는 마지막 알림 id다. **처리 여부와 무관하게 커서는 나간다** — 아니면 같은 것을 영영 다시 읽는다.
+
+### 그룹은 프로필을 물어야 보이고, 뱃지를 끄면 안 보인다
+
+**글·메시지의 작성자에는 그룹이 실리지 않는다** — 코어의 `PostProjection`이 `AccountView`의
+위치 인자 넷과 `badge_html`만 채우고 `groups`는 비운 채 둔다. 그룹으로 무언가를 가르는 봇은
+**작성자마다 `GET /api/v1/accounts/{id}`를 한 번 더** 불러야 한다(캐시할 값이다).
+
+**그리고 뱃지를 끈 그룹은 봇에게 보이지 않는다.** 코어는 `GroupProfile.Badge`가 꺼진 그룹을
+`Permission.Groups` 권한자가 아닌 모두에게서 가린다(39 확정 2) — 봇은 보통 그 권한이 없다.
+그러니 **그룹으로 거르는 봇은 그 그룹이 뱃지 그룹이어야 하고**, 아니면 아무도 걸리지 않은 채
+조용히 논다. `GroupProfile` 행이 아예 없는 그룹은 가려지지 않는다(그룹은 표를 두지 않는다 —
+태그처럼 쓰이는 동안만 존재한다).
 
 ### 코어의 제약 둘은 이쪽이 정하지 않는다
 

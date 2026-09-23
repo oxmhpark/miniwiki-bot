@@ -21,6 +21,30 @@ export interface AccountRef {
   readonly id: string;
   readonly handle: string;
   readonly display_name?: string;
+
+  /**
+   * 그 사람이 속한 그룹들 — **프로필을 묻는 자리에서만 찬다**.
+   *
+   * <b>글·메시지의 작성자에는 실리지 않는다</b>(코어의 `PostProjection`은 `badge_html`만
+   * 채운다). 그룹으로 무언가를 가르려면 `account(id)`를 따로 불러야 한다.
+   *
+   * **뱃지를 끈 그룹은 여기 없다** — `Permission.Groups` 권한자에게만 보인다(코어 39 확정 2).
+   * 봇은 보통 그 권한이 없으므로, 뱃지가 꺼진 그룹으로 거르면 **아무도 걸리지 않는다.**
+   */
+  readonly groups?: readonly string[];
+}
+
+/** 나가는 글의 공개 범위. **`public`은 코어에 없는 이름이다**(2026-09-08에 400으로 드러났다). */
+export type Visibility = 'server' | 'federated' | 'followers' | 'private';
+
+/** 메시지함의 한 줄 — `PostView`를 감싼다. */
+export interface MessageEntry {
+  readonly message: {
+    readonly id: string;
+    readonly author: AccountRef;
+    readonly content: string;
+    readonly media?: readonly unknown[];
+  };
 }
 
 /** 알림의 행위자 — 로컬(`id`·`handle`)일 수도 원격(`acct`)일 수도 있다. */
@@ -78,6 +102,29 @@ export interface Sierra {
 
   /** 메시지 하나 — `recipients`가 있으면 그것이 곧 DM이다. */
   message(body: string, handle: string): Promise<void>;
+
+  /**
+   * 참여한 메시지들 — **`since_id` 뒤의 것만**. 코어는 최신순으로 돌려준다.
+   *
+   * **알림이 아니라 메시지함을 본다.** `/notifications`에는 `since_id`가 없어 *새것만*을
+   * 물을 수 없다(`max_id`뿐이다) — 폴링이 커서로 도는 쪽을 고른다.
+   */
+  messages(since: string | undefined): Promise<readonly MessageEntry[]>;
+
+  /** 한 사람의 프로필 — **그룹을 아는 유일한 자리**다. */
+  account(id: string): Promise<AccountRef>;
+
+  /** 공개 글 하나. */
+  publish(body: string, visibility: Visibility): Promise<void>;
+
+  /**
+   * 마지막으로 낸 글의 시각 — **코어가 진실원이다**. 상태를 잃은 배포가 시계를 되찾는다.
+   *
+   * **스코프가 둘 든다**: 자기 아이디에 `read:accounts`, 자기 글 목록에 **`read:feeds`**
+   * (2026-09-08에 403으로 드러났다 — 계정의 글은 프로필이 아니라 *목록*의 권한을 탄다).
+   * **없으면 없는 것으로 친다** — 시계를 못 되찾을 뿐 봇은 그대로 돈다.
+   */
+  lastPost(): Promise<number | undefined>;
 }
 
 interface TokenResponse {
@@ -164,6 +211,38 @@ export class SierraClient implements Sierra {
 
   async message(body: string, handle: string): Promise<void> {
     await this.send('POST', '/api/v1/posts', { body, recipients: [handle] });
+  }
+
+  async messages(since: string | undefined): Promise<readonly MessageEntry[]> {
+    const query = since === undefined ? '' : `?since_id=${encodeURIComponent(since)}`;
+    return await this.send<readonly MessageEntry[]>('GET', `/api/v1/messages${query}`);
+  }
+
+  async account(id: string): Promise<AccountRef> {
+    return await this.send<AccountRef>('GET', `/api/v1/accounts/${encodeURIComponent(id)}`);
+  }
+
+  async publish(body: string, visibility: Visibility): Promise<void> {
+    await this.send('POST', '/api/v1/posts', { body, visibility });
+  }
+
+  async lastPost(): Promise<number | undefined> {
+    try {
+      const me = await this.me();
+      const posts = await this.send<readonly { readonly created_at: string }[]>(
+        'GET', `/api/v1/accounts/${me.id}/posts?limit=1`,
+      );
+
+      const newest = posts[0]?.created_at;
+      if (newest === undefined) {
+        return undefined;
+      }
+
+      const at = Date.parse(newest);
+      return Number.isNaN(at) ? undefined : at;
+    } catch {
+      return undefined;
+    }
   }
 
   /** 비밀은 바디로 보낸다 — 프록시가 헤더를 적는 일이 흔하다. */

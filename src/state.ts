@@ -206,6 +206,23 @@ export class FileStore {
     await writeJson(this.cursorPath(botId), { id });
   }
 
+  // ── 봇마다의 포크 상태 ──────────────────────────────────────────────────
+
+  /**
+   * **포크가 정하는 모양**(`data.json`) — 템플릿은 안을 모른다.
+   *
+   * 커서는 템플릿의 것이지만(어느 봇이든 *어디까지 읽었나*가 있다) 그 밖에 봇이 남길 것은
+   * 봇마다 다르다 — 에코의 풀과 발행 시계, 다른 봇의 무엇. **봇 폴더 안에 두므로 봇을 지우면
+   * 함께 간다.**
+   */
+  async botData<T>(botId: string): Promise<T | undefined> {
+    return await readJson<T>(this.botDataPath(botId));
+  }
+
+  async saveBotData<T>(botId: string, data: T): Promise<void> {
+    await writeJson(this.botDataPath(botId), data);
+  }
+
   // ── 봇마다의 사람들 ─────────────────────────────────────────────────────
 
   async user<T>(botId: string, userId: string): Promise<UserRecord<T> | undefined> {
@@ -274,6 +291,10 @@ export class FileStore {
 
   private cursorPath(botId: string): string {
     return join(this.botDir(botId), 'cursor.json');
+  }
+
+  private botDataPath(botId: string): string {
+    return join(this.botDir(botId), 'data.json');
   }
 
   private userPath(botId: string, userId: string): string {
