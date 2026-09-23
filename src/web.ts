@@ -3,7 +3,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { GithubApp } from './auth.js';
 import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
-import { manifestOf } from './manifest.js';
+import { declarationChanged, manifestOf } from './manifest.js';
+import {
+  botPage, deletePage, gatePage, homePage, newBotPage, noRoomPage, stopPage,
+} from './pages.js';
 import { renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
@@ -13,22 +16,31 @@ import { escapeHtml } from './text.js';
 import { Tickets } from './tickets.js';
 
 /**
- * 사람이 브라우저로 닿는 자리.
+ * 사람이 브라우저로 닿는 자리 — **문을 열고 폼을 받는다. 그림은 `pages.ts`에 있다.**
  *
  * **스크립트가 없다.** 여는 일은 마크업이 맡고 폼이 전부다 — 봇 서버의 화면이라 프레임워크를
  * 들이지 않는다. 공개 지식(`manifest.json`)과 임자의 자리(`/bots/...`)가 한 서버에 있고,
  * **문지기는 쿠키 하나**다.
  *
+ * **한 화면은 한 가지 일을 한다**(2026-09-23 요구) — 고르는 자리·짓는 자리·만지는 자리가
+ * 각자 주소를 가진다. 한 장에 겹쳐 두면 봇이 셋일 때 만들기 폼이 목록을 밀어낸다.
+ *
  * ```
  * GET  /healthz
- * GET  /                         봇 목록(로그인했으면) · 들어오는 문(아니면)
+ * GET  /                         내 봇들(로그인했으면) · 들어오는 문(아니면)
  * GET  /auth/github              GitHub으로 보낸다
  * GET  /auth/github/callback     돌아온다
  * POST /auth/logout
+ * GET  /bots/new                 봇 만들기 폼
  * POST /bots                     봇을 만든다
- * GET  /bots/{id}                봇 하나 — 선언 주소와 자격 증명
+ * GET  /bots/{id}                봇 하나 — 잇고 · 고치고 · 멈추는 자리
  * POST /bots/{id}/credentials    시에라에서 받은 client_id·secret을 붙인다
+ * POST /bots/{id}/declaration    이름·소개를 고친다 — **선언의 판이 오른다**
+ * POST /bots/{id}/stop           폴링을 쉰다 · POST /bots/{id}/start 다시 돌린다
+ * GET  /bots/{id}/delete         지우기 전에 한 번 보인다
+ * POST /bots/{id}/delete         **지운다** — 이 서비스의 것까지다
  * GET  /bots/{id}/manifest.json  **공개** — 코어가 읽는다
+ * POST /bots/{id}/x/{무엇}       포크의 칸
  * ```
  */
 
@@ -135,9 +147,7 @@ async function handle(
 
   if (account === undefined) {
     if (path === '/') {
-      send(response, 200, page('봇을 세운다', `
-        <p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>
-        <p><a class="button" href="/auth/github">GitHub으로 들어가기</a></p>`));
+      send(response, 200, gatePage());
       return;
     }
 
@@ -145,8 +155,20 @@ async function handle(
     return;
   }
 
+  const spoken = url.searchParams.get('said') ?? undefined;
+
   if (path === '/' && request.method === 'GET') {
-    await renderHome(response, options, account);
+    const bots = await options.store.botsOf(account.id);
+    send(response, 200, homePage(account, bots, options.maxBotsPerAccount, spoken));
+    return;
+  }
+
+  // **짓는 자리는 따로 선다** — 목록이 만들기 폼을 지고 다니지 않는다.
+  if (path === '/bots/new' && request.method === 'GET') {
+    const mine = await options.store.botsOf(account.id);
+    send(response, 200, mine.length >= options.maxBotsPerAccount
+      ? noRoomPage(options.maxBotsPerAccount)
+      : newBotPage());
     return;
   }
 
@@ -156,17 +178,17 @@ async function handle(
   }
 
   const one = /^\/bots\/([0-9a-fA-F-]{36})$/.exec(path);
-  const credentials = /^\/bots\/([0-9a-fA-F-]{36})\/credentials$/.exec(path);
+  const what = /^\/bots\/([0-9a-fA-F-]{36})\/([a-z]{1,20})$/.exec(path);
   const extra = /^\/bots\/([0-9a-fA-F-]{36})\/x\/([A-Za-z0-9_-]{1,40})$/.exec(path);
 
   if (one !== null) {
     const bot = await ownBot(options, account, one[1] ?? '');
     if (bot === undefined) {
-      send(response, 404, page('없다', '<p>그런 봇이 없습니다.</p>'));
+      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/'));
       return;
     }
 
-    await renderBot(response, options, bot, url.searchParams.get('said') ?? undefined);
+    await renderBot(response, options, bot, spoken);
     return;
   }
 
@@ -174,44 +196,84 @@ async function handle(
   if (extra !== null && request.method === 'POST') {
     const bot = await ownBot(options, account, extra[1] ?? '');
     if (bot === undefined || options.panel === undefined) {
-      send(response, 404, page('없다', '<p>그런 자리가 없습니다.</p>'));
+      send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/'));
       return;
     }
 
-    const what = extra[2] ?? '';
+    const name = extra[2] ?? '';
     const ctx = options.fleet.contextOf(bot);
-    let said: string | undefined;
+    let line: string | undefined;
 
     try {
-      said = what === 'settings'
+      line = name === 'settings'
         ? await options.panel.save?.(await readForm(request), bot, ctx)
-        : await options.panel.act?.(what, bot, ctx);
+        : await options.panel.act?.(name, bot, ctx);
     } catch (error) {
-      send(response, 400, page('안 됐다', `
-        <p>${escapeHtml((error as Error).message)}</p>
-        <p><a href="/bots/${bot.id}">돌아가기</a></p>`));
+      send(response, 400, stopPage('안 됐다',
+        `<p>${escapeHtml((error as Error).message)}</p>`, `/bots/${bot.id}`));
       return;
     }
 
     // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.
-    redirect(response, said === undefined
-      ? `/bots/${bot.id}`
-      : `/bots/${bot.id}?said=${encodeURIComponent(said)}`);
+    back(response, bot.id, line);
     return;
   }
 
-  if (credentials !== null && request.method === 'POST') {
-    const bot = await ownBot(options, account, credentials[1] ?? '');
+  if (what !== null) {
+    const bot = await ownBot(options, account, what[1] ?? '');
     if (bot === undefined) {
-      send(response, 404, page('없다', '<p>그런 봇이 없습니다.</p>'));
+      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/'));
       return;
     }
 
+    await botAction(request, response, options, bot, what[2] ?? '');
+    return;
+  }
+
+  send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/'));
+}
+
+/** 봇 하나에 하는 일들 — 주소의 끝 한 마디가 무엇을 할지 정한다. */
+async function botAction(
+  request: IncomingMessage,
+  response: ServerResponse,
+  options: WebOptions,
+  bot: BotRecord,
+  verb: string,
+): Promise<void> {
+  const post = request.method === 'POST';
+
+  if (verb === 'credentials' && post) {
     await connectBot(request, response, options, bot);
     return;
   }
 
-  send(response, 404, page('없다', '<p>그런 자리가 없습니다.</p>'));
+  if (verb === 'declaration' && post) {
+    await editDeclaration(request, response, options, bot);
+    return;
+  }
+
+  // **멈추는 것은 자격 증명을 두고 읽기만 쉰다** — 지우는 것과 다른 무게다.
+  if ((verb === 'stop' || verb === 'start') && post) {
+    await options.store.saveBot({ ...bot, stopped: verb === 'stop' });
+    await options.fleet.sync();
+    options.log(`봇 ${bot.id}이(가) ${verb === 'stop' ? '멈췄다' : '다시 돈다'}`);
+
+    back(response, bot.id, verb === 'stop' ? '멈췄습니다.' : '다시 돕니다.');
+    return;
+  }
+
+  if (verb === 'delete') {
+    if (post) {
+      await deleteBot(response, options, bot);
+    } else {
+      send(response, 200, deletePage(bot));
+    }
+
+    return;
+  }
+
+  send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', `/bots/${bot.id}`));
 }
 
 /** **임자의 것인지 본다** — id를 아는 것만으로 남의 봇을 만지지 못한다. */
@@ -222,51 +284,24 @@ async function ownBot(
   return bot?.accountId === account.id ? bot : undefined;
 }
 
-async function renderHome(
-  response: ServerResponse, options: WebOptions, account: AccountRecord,
-): Promise<void> {
-  const bots = await options.store.botsOf(account.id);
-
-  const rows = bots.length === 0
-    ? '<p>아직 봇이 없습니다.</p>'
-    : `<ul>${bots.map((bot) => `<li><a href="/bots/${bot.id}">${escapeHtml(bot.declaration.name)}</a>
-        — ${escapeHtml(bot.origin)} ·
-        ${isConnected(bot) ? (bot.stopped === true ? '멈춰 있다' : '돈다') : '<b>아직 잇지 않았다</b>'}</li>`).join('')}</ul>`;
-
-  const room = bots.length < options.maxBotsPerAccount;
-
-  send(response, 200, page(`${escapeHtml(account.login)}의 봇`, `
-    ${rows}
-    <hr>
-    ${room ? `
-    <h2>봇 만들기</h2>
-    <form method="post" action="/bots">
-      <p><label>이름 <input name="name" required maxlength="60"></label></p>
-      <p><label>소개 <input name="summary" required maxlength="200"></label></p>
-      <p><label>붙을 시에라 <input name="origin" required type="url" placeholder="https://..."></label></p>
-      <p><button class="button" type="submit">만든다</button></p>
-    </form>`
-    : `<p>봇은 ${options.maxBotsPerAccount}개까지입니다. 시에라 쪽 한도(<code>bot.max_per_user</code>)에
-       맞춘 수라, 늘리려면 그 시에라의 관리자가 먼저 늘려야 합니다.</p>`}
-    <form method="post" action="/auth/logout"><button type="submit">나가기</button></form>`));
-}
-
 async function createBot(
   request: IncomingMessage, response: ServerResponse, options: WebOptions, account: AccountRecord,
 ): Promise<void> {
   const form = await readForm(request);
   const name = (form.get('name') ?? '').trim();
   const summary = (form.get('summary') ?? '').trim();
-  const origin = (form.get('origin') ?? '').trim().replace(/\/+$/, '');
+  const origin = cleanOrigin(form.get('origin') ?? '');
 
-  if (name === '' || summary === '' || !/^https:\/\/[^\s/]+/.test(origin)) {
-    send(response, 400, page('다시', '<p>이름·소개·시에라 주소(https)가 있어야 합니다. <a href="/">돌아가기</a></p>'));
+  // **적은 것을 돌려준다** — 한 칸이 틀렸다고 셋을 다시 적게 하지 않는다.
+  if (name === '' || summary === '' || origin === undefined) {
+    send(response, 400, newBotPage({ name, summary, origin: (form.get('origin') ?? '').trim() },
+      '이름·소개·시에라 주소(https)가 있어야 합니다.'));
     return;
   }
 
   const mine = await options.store.botsOf(account.id);
   if (mine.length >= options.maxBotsPerAccount) {
-    send(response, 400, page('한도', '<p>봇 수가 한도에 닿았습니다. <a href="/">돌아가기</a></p>'));
+    send(response, 400, noRoomPage(options.maxBotsPerAccount));
     return;
   }
 
@@ -279,39 +314,100 @@ async function createBot(
   };
 
   await options.store.saveBot(bot);
+  options.log(`봇 ${bot.id}이(가) 섰다 — ${origin}`);
+
   redirect(response, `/bots/${bot.id}`);
 }
 
-async function renderBot(
-  response: ServerResponse, options: WebOptions, bot: BotRecord, said?: string,
+/**
+ * 선언을 고친다 — **바뀌었으면 판을 올린다**.
+ *
+ * 판이 그대로면 코어는 새 선언을 보지 않는다(`manifest.ts`의 `version`). 그래서 이름만 고치고
+ * 판을 두면 *여기서는 고쳐졌는데 시에라에서는 옛 이름*인 봇이 선다.
+ *
+ * **붙은 시에라는 이은 뒤에 못 바꾼다** — 맡은 자격 증명이 그 시에라의 것이라, 주소만 갈면
+ * 봇이 남의 집 열쇠를 들고 서 있게 된다.
+ */
+async function editDeclaration(
+  request: IncomingMessage, response: ServerResponse, options: WebOptions, bot: BotRecord,
 ): Promise<void> {
-  const declaration = `${options.publicOrigin}/bots/${bot.id}/manifest.json`;
+  const form = await readForm(request);
+  const name = (form.get('name') ?? '').trim();
+  const summary = (form.get('summary') ?? '').trim();
 
+  if (name === '' || summary === '') {
+    back(response, bot.id, '이름과 소개가 있어야 합니다.');
+    return;
+  }
+
+  let origin = bot.origin;
+  if (!isConnected(bot)) {
+    const asked = cleanOrigin(form.get('origin') ?? '');
+    if (asked === undefined) {
+      back(response, bot.id, '시에라 주소는 https여야 합니다.');
+      return;
+    }
+
+    origin = asked;
+  }
+
+  const declaration = { ...bot.declaration, name, summary };
+  const moved = declarationChanged(bot.declaration, declaration);
+
+  if (!moved && origin === bot.origin) {
+    back(response, bot.id, '바뀐 것이 없습니다.');
+    return;
+  }
+
+  await options.store.saveBot({
+    ...bot,
+    origin,
+    declaration,
+    settingsVersion: moved ? bot.settingsVersion + 1 : bot.settingsVersion,
+  });
+
+  back(response, bot.id, moved && isConnected(bot)
+    ? '고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다.'
+    : '고쳤습니다.');
+}
+
+/**
+ * **지운다 — 이 서비스의 것까지다**(2026-09-23 결정).
+ *
+ * 시에라의 봇 계정은 여기서 걷지 못한다. 코어의 걷기(`DELETE /api/v1/bots/{id}`)는 **그
+ * 계정의 임자**만 부를 수 있고 이 서비스가 쥔 것은 봇 자신의 자격 증명이다 — 화면이 그
+ * 사실을 누르기 전에 말한다(`deletePage`).
+ *
+ * **먼저 세우고 지운다.** 도는 러너를 둔 채 폴더를 지우면 그 바퀴가 커서를 다시 써 빈 봇
+ * 폴더를 되살린다.
+ */
+async function deleteBot(
+  response: ServerResponse, options: WebOptions, bot: BotRecord,
+): Promise<void> {
+  await options.store.saveBot({ ...bot, stopped: true });
+  await options.fleet.sync();
+
+  await options.store.forgetBot(bot.id);
+  options.log(`봇 ${bot.id}을(를) 지웠다 — ${bot.origin}${
+    bot.handle === undefined ? '' : ` @${bot.handle}`}`);
+
+  redirect(response, `/?said=${encodeURIComponent(`${bot.declaration.name}을(를) 지웠습니다.`)}`);
+}
+
+async function renderBot(
+  response: ServerResponse, options: WebOptions, bot: BotRecord, line?: string,
+): Promise<void> {
   // 포크의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
   const panel = options.panel !== undefined && isConnected(bot)
     ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id)
     : '';
 
-  send(response, 200, page(escapeHtml(bot.declaration.name), `
-    ${said === undefined ? '' : `<p class="said">${escapeHtml(said)}</p>`}
-    <p>${escapeHtml(bot.declaration.summary)}</p>
-    <h2>1. 이 주소를 시에라에 붙인다</h2>
-    <p><code>${escapeHtml(declaration)}</code></p>
-    <p><b>${escapeHtml(bot.origin)}</b>에 그 시에라의 계정으로 들어가 <b>봇 설치</b>에 위 주소를
-       붙이면 봇 계정이 서고 <code>client_id</code>와 <code>client_secret</code>이 나옵니다.
-       <b>비밀은 그때 한 번만 보이지만, 잃으면 다시 낼 수 있습니다.</b></p>
-    <h2>2. 받은 것을 여기 맡긴다</h2>
-    ${isConnected(bot)
-      ? `<p>이어져 있습니다 — <code>${escapeHtml(bot.handle ?? '')}</code>.
-         다시 맡기면 옛것을 덮습니다.</p>`
-      : '<p>아직 잇지 않았습니다.</p>'}
-    <form method="post" action="/bots/${bot.id}/credentials">
-      <p><label>client_id <input name="client_id" required></label></p>
-      <p><label>client_secret <input name="client_secret" type="password" required></label></p>
-      <p><button class="button" type="submit">맡긴다</button></p>
-    </form>
-    ${panel}
-    <p><a href="/">돌아가기</a></p>`));
+  send(response, 200, botPage({
+    bot,
+    declarationUrl: `${options.publicOrigin}/bots/${bot.id}/manifest.json`,
+    panel,
+    ...(line === undefined ? {} : { line }),
+  }));
 }
 
 /**
@@ -328,7 +424,7 @@ async function connectBot(
   const clientSecret = (form.get('client_secret') ?? '').trim();
 
   if (clientId === '' || clientSecret === '') {
-    send(response, 400, page('다시', `<p>둘 다 있어야 합니다. <a href="/bots/${bot.id}">돌아가기</a></p>`));
+    back(response, bot.id, '둘 다 있어야 합니다.');
     return;
   }
 
@@ -344,9 +440,9 @@ async function connectBot(
       ? `시에라가 ${error.status}로 답했습니다${error.key === undefined ? '' : ` (${error.key})`}`
       : (error as Error).message;
 
-    send(response, 400, page('안 통했다', `
-      <p>그 자격 증명으로는 ${escapeHtml(bot.origin)}에 닿지 못했습니다 — ${escapeHtml(why)}.</p>
-      <p><a href="/bots/${bot.id}">다시 맡기기</a></p>`));
+    send(response, 400, stopPage('안 통했다', `
+      <p>그 자격 증명으로는 ${escapeHtml(bot.origin)}에 닿지 못했습니다 — ${escapeHtml(why)}.</p>`,
+      `/bots/${bot.id}`, '다시 맡기기'));
     return;
   }
 
@@ -364,10 +460,23 @@ async function connectBot(
   await options.fleet.sync();
   options.log(`봇 ${bot.id}이(가) ${bot.origin}의 @${handle}로 이어졌다`);
 
-  redirect(response, `/bots/${bot.id}`);
+  back(response, bot.id, `@${handle}로 이어졌습니다.`);
 }
 
 // ── 잡일 ──────────────────────────────────────────────────────────────────
+
+/** 끝의 `/`를 떼고 https인지 본다 — **아니면 `undefined`**. */
+function cleanOrigin(raw: string): string | undefined {
+  const origin = raw.trim().replace(/\/+$/, '');
+  return /^https:\/\/[^\s/]+$/.test(origin) ? origin : undefined;
+}
+
+/** 봇 화면으로 돌려보낸다 — **한 말은 주소에 싣고 새로고침에는 남기지 않는다**. */
+function back(response: ServerResponse, botId: string, line?: string): void {
+  redirect(response, line === undefined
+    ? `/bots/${botId}`
+    : `/bots/${botId}?said=${encodeURIComponent(line)}`);
+}
 
 function cookie(request: IncomingMessage): string | undefined {
   const raw = request.headers.cookie;
@@ -408,40 +517,4 @@ function redirect(response: ServerResponse, location: string): void {
 
 function send(response: ServerResponse, status: number, html: string): void {
   response.writeHead(status, { 'content-type': 'text/html; charset=utf-8' }).end(html);
-}
-
-/** 옷은 한 벌뿐이다 — 봇의 페이지라 하멜 스킨 밖이다. */
-function page(title: string, body: string): string {
-  return `<!doctype html>
-<html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title>
-<style>
-  body { max-width: 34rem; margin: 3rem auto; padding: 0 1rem;
-         font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
-  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
-  input, select { width: 100%; padding: .4rem; font: inherit; }
-  label { display: block; }
-  small { display: block; color: #666; margin-top: .2rem; }
-  dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 1rem 0; }
-  dt { color: #666; } dd { margin: 0; }
-  form + form { margin-top: .5rem; }
-  .button, button { padding: .5rem 1rem; font: inherit; cursor: pointer;
-                    border: 1px solid #1a1a1a; border-radius: .3rem;
-                    background: #1a1a1a; color: #fff; text-decoration: none; display: inline-block; }
-  form button:not(.button) { background: #fff; color: #1a1a1a; }
-  hr { border: 0; border-top: 1px solid #ddd; margin: 2rem 0; }
-  .said { padding: .6rem .8rem; border-left: 3px solid #1a1a1a; background: #f2f2f2; }
-  /* **되돌릴 수 없는 것은 가로줄 아래에 선다** — 누르면 공개 글이 나가는 자리다. */
-  .grave { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
-  @media (prefers-color-scheme: dark) {
-    body { color: #e8e8e8; background: #161616; }
-    code { background: #2a2a2a; }
-    .said { border-left-color: #e8e8e8; background: #2a2a2a; }
-    .grave { border-top-color: #333; }
-    small, dt { color: #9a9a9a; }
-    .button, button { background: #e8e8e8; color: #161616; border-color: #e8e8e8; }
-    form button:not(.button) { background: #161616; color: #e8e8e8; }
-  }
-</style></head><body><h1>${title}</h1>${body}</body></html>`;
 }
