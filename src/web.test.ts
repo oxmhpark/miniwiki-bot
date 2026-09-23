@@ -43,7 +43,7 @@ beforeEach(async () => {
     maxBotsPerAccount: 2,
     scopes: ['read:posts'],
     serviceName: '에코',
-    readme: '<h2>소개</h2><p>맡긴 메시지를 옮겨 적습니다.</p>',
+    about: '<h2>소개</h2><p>맡긴 메시지를 옮겨 적습니다.</p>',
     log: () => undefined,
   });
 

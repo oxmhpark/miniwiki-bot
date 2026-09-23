@@ -30,7 +30,7 @@ import { Tickets } from './tickets.js';
  *
  * ```
  * GET  /healthz
- * GET  /                         **첫 화면** — 이 서비스가 무엇인가(`README.md`)
+ * GET  /                         **첫 화면** — 이 서비스가 무엇인가(`ABOUT.md`)
  * GET  /bots                     **내 봇들** — 로그인한 사람의 자리
  * GET  /auth/github              GitHub으로 보낸다
  * GET  /auth/github/callback     돌아온다
@@ -68,8 +68,8 @@ export interface WebOptions {
   readonly scopes: readonly string[];
   /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
   readonly serviceName: string;
-  /** 첫 화면의 본문 — `README.md`를 그린 것. 없으면 빈 문자열이다. */
-  readonly readme: string;
+  /** 첫 화면의 본문 — 그 봇의 `ABOUT.md`를 그린 것. 없으면 빈 문자열이다. */
+  readonly about: string;
   /** 포크가 봇 화면에 더하는 칸 — 없으면 템플릿의 것만 선다. */
   readonly panel?: BotPanel;
   readonly log: (line: string) => void;
@@ -162,7 +162,7 @@ async function handle(
    * 바뀌는 것은 제목줄과, 목록으로 가는 단추 하나뿐이다.
    */
   if (path === '/' && request.method === 'GET') {
-    send(response, 200, landingPage(options.serviceName, options.readme, account));
+    send(response, 200, landingPage(options.serviceName, options.about, account));
     return;
   }
 

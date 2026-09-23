@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { renderMarkdown } from './markdown.js';
 
 /**
- * **첫 화면이 `README.md`를 그린다** — 그 문서가 화면에서 어떻게 서는지가 여기 있다.
+ * **첫 화면이 `ABOUT.md`를 그린다** — 그 문서가 화면에서 어떻게 서는지가 여기 있다.
  *
  * 특히 **남이 적은 것을 그리게 되는 날을 대비한 줄들**이 있다: HTML은 짓지 않고, 밖으로
  * 나가는 주소만 링크가 된다.

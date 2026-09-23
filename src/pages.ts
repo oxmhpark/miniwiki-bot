@@ -14,7 +14,7 @@ import { escapeHtml } from './text.js';
  * 가리킬 수 있고, **스크립트가 죽어도 선다**(모체 `CLAUDE.md`의 펼침메뉴 규칙과 같은 정신).
  *
  * ```
- * /                     첫 화면            — 이 서비스가 무엇인가(README)
+ * /                     첫 화면            — 이 서비스가 무엇인가(ABOUT.md)
  * /bots                 내 봇들            — 고르는 자리
  * /bots/new             봇 만들기          — 짓는 자리
  * /bots/{id}            **등록정보**       — 이름·소개·초상화·배경
@@ -74,7 +74,7 @@ export function page(title: string, body: string): string {
   .bots a { font-weight: 600; }
   .bots small { margin-top: .3rem; }
   .idle { color: #a01b1b; }
-  /* 첫 화면의 문서 — README.md가 여기 선다. */
+  /* 첫 화면의 문서 — ABOUT.md가 여기 선다. */
   .doc { margin-top: 1.5rem; }
   .doc h2 { font-size: 1.25rem; margin-top: 2rem; }
   .doc h3 { font-size: 1.05rem; margin-top: 1.5rem; }
@@ -151,19 +151,22 @@ function who(service: string, account?: AccountRecord): string {
 /**
  * **첫 화면**(`/`) — 이 서비스가 무엇인가.
  *
- * 본문은 저장소의 `README.md`다(2026-09-23 요구). 무엇을 하는 서비스인지 적은 글이 이미
- * 있는데 화면을 위해 다시 쓰면 **두 벌이 갈린다** — 한쪽만 고쳐지는 자리를 만들지 않는다.
+ * 본문은 그 봇의 `ABOUT.md`다(2026-09-23 요구) — **`README.md`가 아니다**. 그 파일은 저장소를
+ * 여는 개발자의 것이고 템플릿에도 있어야 하는데, 첫 화면까지 그것으로 지면 **포크가 merge할
+ * 때마다 부딪힌다**. 화면에 설 말은 화면의 파일에 적는다.
+ *
+ * **없어도 막히지 않는다** — 제목줄과 단추만 서고 소개 한 줄이 그 자리를 지킨다.
  *
  * **로그인해도 이 자리는 이 자리다.** 바뀌는 것은 제목줄과, 목록으로 가는 단추 하나뿐이다 —
  * 주소가 가리키는 것과 보이는 것이 같아야 하고, 들어온 사람도 소개를 다시 볼 수 있어야 한다.
  */
-export function landingPage(service: string, readme: string, account?: AccountRecord): string {
+export function landingPage(service: string, about: string, account?: AccountRecord): string {
   return page(escapeHtml(service), `
     ${top(who(service, account), account === undefined ? ENTER : LEAVE)}
     ${account === undefined
       ? '<p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>'
       : '<p><a class="button" href="/bots">내 봇들</a></p>'}
-    ${readme === '' ? '' : `<div class="doc">${readme}</div>`}`);
+    ${about === '' ? '' : `<div class="doc">${about}</div>`}`);
 }
 
 /**

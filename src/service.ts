@@ -87,10 +87,14 @@ export async function startService(options: ServiceOptions): Promise<void> {
   });
 
   /*
-   * **첫 화면의 본문은 `README.md`다**(2026-09-23 요구). 한 번 읽어 그려 두고 다시 읽지
+   * **첫 화면의 본문은 `ABOUT.md`다**(2026-09-23 요구). 한 번 읽어 그려 두고 다시 읽지
    * 않는다 — 이미지 안에서 바뀌지 않는 파일이다.
+   *
+   * **`README.md`가 아니다.** 그 파일은 저장소를 여는 개발자의 것이고 템플릿에도 있어야
+   * 하는데, 첫 화면까지 그것으로 지면 **포크가 merge할 때마다 부딪힌다** — `BOT.md`와
+   * `PROJECT.md`를 가른 것과 같은 까닭이다. 없으면 첫 화면은 제목과 단추만 선다.
    */
-  const readme = await beside('README.md');
+  const about = await beside('ABOUT.md');
   const name = await serviceName(config.serviceName);
 
   const server = createWebServer({
@@ -107,7 +111,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     maxBotsPerAccount: config.maxBotsPerAccount,
     scopes: options.scopes ?? DEFAULT_SCOPES,
     serviceName: name,
-    readme: readme === undefined ? '' : renderMarkdown(readme),
+    about: about === undefined ? '' : renderMarkdown(about),
     ...(options.panel === undefined ? {} : { panel: options.panel }),
     log,
   });

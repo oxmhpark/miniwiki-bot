@@ -37,7 +37,8 @@ npm run dev
 
 ## 자기 봇 짓기
 
-고치는 것은 `src/main.ts`와 그 아래뿐이다.
+고치는 것은 `src/main.ts`와 그 아래뿐이다. 그리고 **`ABOUT.md`를 둔다** — 첫 화면(`/`)에
+서는 소개다. 이 파일(`README.md`)은 저장소를 여는 사람의 것이라 화면이 지지 않는다.
 
 ```ts
 class MyBrain implements BotBrain {
