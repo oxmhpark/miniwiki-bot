@@ -154,7 +154,9 @@ const panel: BotPanel = {
 | 쓰레드 | `GET /api/v1/posts/{id}/context` — 평평한 목록, `in_reply_to`로 사슬을 짠다 |
 | 메시지함 | `GET /api/v1/messages?since_id=…` — **알림과 달리 `since_id`가 있다**(알림에는 `max_id`뿐이라 *새것만*을 물을 수 없다) |
 | 한 사람 | `GET /api/v1/accounts/{id}` — **그룹과 `is_bot`을 아는 유일한 자리**. 답이 `{account, relationship, is_bot}`으로 **감싸여 온다**(`AccountProfileView`) — `groups`는 `account` 안에 있다 |
-| 공개 글 | `POST /api/v1/posts` `{body, visibility}`. `public`은 **코어에 없는 이름**이다 |
+| 공개 글 | `POST /api/v1/posts` `{body, visibility, media_ids}`. `public`은 **코어에 없는 이름**이다 |
+| 첨부 받기 | `GET {url}` — `MediaView.url`은 상대 경로다. **인증이 든다**(쓰레드 권한을 탄다) |
+| 첨부 올리기 | `POST /api/v1/media` — `multipart/form-data`의 `file`·`description`. 스코프는 `write:posts`로 족하다. **형식은 매직 바이트로 판정**하므로 보낸 이름·타입은 참고일 뿐이다 |
 | 내 마지막 글 | `GET /api/v1/accounts/{나}/posts?limit=1` — `read:feeds`가 든다(계정의 글은 *목록*의 권한을 탄다) |
 | 답글 | `POST /api/v1/posts` `{body, in_reply_to}` — **`visibility`·`recipients`를 싣지 않는다**(뿌리를 상속한다, M25) |
 | 메시지 | 같은 엔드포인트에 `recipients: ["아이디"]` |
@@ -186,6 +188,20 @@ const panel: BotPanel = {
 
 그러니 지켜야 할 것은 *뱃지를 켜라*가 아니라 **뱃지를 끈 그룹으로 거르지 마라**다. 그런
 그룹을 쓰면 아무도 걸리지 않은 채 조용히 논다.
+
+### 남의 첨부를 옮길 때는 다시 올린다 — id도 경로도 재활용되지 않는다
+
+**미디어의 접근 권한은 그것이 붙은 글 하나를 따른다**(`MediaService.EnsureVisibleAsync`)
+— `post_id`가 **하나뿐**이고, 그 글이 `Federated`·`Server`·`Quiet`일 때만 누구나 열린다.
+그래서 남이 보낸 메시지의 첨부를 봇의 공개 글로 옮길 때 **원본을 가리키는 것은 둘 다 막힌다**:
+
+| 어떻게 | 무슨 일이 나는가 |
+|---|---|
+| `media_ids`에 **원본 id** | 권한이 원본 글(DM)을 따르면 **남들에게 깨진다**. 반대로 `post_id`가 봇 글로 옮겨가면 **보낸 사람의 원본에서 첨부가 사라진다** |
+| 본문에 **원본 경로**(`/media/{id}/original`) | 같은 벽이다 — 그 주소를 여는 것도 `EnsureVisibleAsync`를 지난다. 2026-09-23에 `direct` 글의 첨부를 익명으로 열어 **404**를 확인했다 |
+
+**그래서 받아서 다시 올린다.** 그러면 봇이 `owner_id`가 되고 권한은 봇의 글을 따른다.
+원본이 지워졌으면 그때는 본문만 나간다 — 보낸 사람이 지운 것이므로 그 편이 옳다.
 
 ### 코어의 제약 둘은 이쪽이 정하지 않는다
 

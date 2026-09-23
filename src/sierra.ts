@@ -57,13 +57,24 @@ export interface AccountProfile {
 /** 나가는 글의 공개 범위. **`public`은 코어에 없는 이름이다**(2026-09-08에 400으로 드러났다). */
 export type Visibility = 'server' | 'federated' | 'followers' | 'private';
 
+/** 글에 붙은 것 하나 — 코어의 `MediaView`. */
+export interface MediaRef {
+  readonly id: string;
+  readonly kind?: string;
+  readonly mime_type?: string | null;
+  /** 원본을 받는 자리. 상대 경로로 온다 — `origin`을 붙여 부른다. */
+  readonly url?: string | null;
+  readonly description?: string | null;
+  readonly byte_size?: number;
+}
+
 /** 메시지함의 한 줄 — `PostView`를 감싼다. */
 export interface MessageEntry {
   readonly message: {
     readonly id: string;
     readonly author: AccountRef;
     readonly content: string;
-    readonly media?: readonly unknown[];
+    readonly media?: readonly MediaRef[];
   };
 }
 
@@ -134,8 +145,26 @@ export interface Sierra {
   /** 한 사람의 프로필 — **그룹과 `is_bot`을 아는 유일한 자리**다. */
   account(id: string): Promise<AccountProfile>;
 
-  /** 공개 글 하나. */
-  publish(body: string, visibility: Visibility): Promise<void>;
+  /** 공개 글 하나. `mediaIds`가 있으면 그것을 붙인다. */
+  publish(body: string, visibility: Visibility, mediaIds?: readonly string[]): Promise<void>;
+
+  /**
+   * 붙은 것 하나를 **받아 온다** — 봇의 눈으로 연다.
+   *
+   * 메시지의 첨부는 그 쓰레드의 권한을 타므로 인증이 든다. 못 받으면 던진다.
+   */
+  fetchMedia(url: string): Promise<{ readonly bytes: Uint8Array; readonly mime: string }>;
+
+  /**
+   * 받은 것을 **봇의 것으로 다시 올린다** — `multipart/form-data`.
+   *
+   * <b>원본 id를 그대로 붙일 수는 없다.</b> 코어는 미디어의 접근 권한을 *그것이 붙은 글*
+   * 하나로 판정하고(`EnsureVisibleAsync`) `post_id`는 하나뿐이다 — 남의 것을 그대로 실으면
+   * 보는 사람에게 깨지거나(권한이 원본 글을 따른다) 원본 글에서 첨부가 사라진다.
+   */
+  uploadMedia(
+    bytes: Uint8Array, mime: string, description?: string,
+  ): Promise<{ readonly id: string }>;
 
   /**
    * 마지막으로 낸 글의 시각 — **코어가 진실원이다**. 상태를 잃은 배포가 시계를 되찾는다.
@@ -242,8 +271,54 @@ export class SierraClient implements Sierra {
     return await this.send<AccountProfile>('GET', `/api/v1/accounts/${encodeURIComponent(id)}`);
   }
 
-  async publish(body: string, visibility: Visibility): Promise<void> {
-    await this.send('POST', '/api/v1/posts', { body, visibility });
+  async publish(
+    body: string, visibility: Visibility, mediaIds?: readonly string[],
+  ): Promise<void> {
+    await this.send('POST', '/api/v1/posts', {
+      body,
+      visibility,
+      ...(mediaIds === undefined || mediaIds.length === 0 ? {} : { media_ids: [...mediaIds] }),
+    });
+  }
+
+  async fetchMedia(url: string): Promise<{ readonly bytes: Uint8Array; readonly mime: string }> {
+    const target = url.startsWith('http') ? url : `${this.config.origin}${url}`;
+
+    const response = await fetch(target, {
+      headers: { authorization: `Bearer ${await this.accessToken()}` },
+    });
+
+    if (!response.ok) {
+      throw new SierraError(response.status, await response.text());
+    }
+
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      mime: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  async uploadMedia(
+    bytes: Uint8Array, mime: string, description?: string,
+  ): Promise<{ readonly id: string }> {
+    const form = new FormData();
+    // **코어는 매직 바이트로 형식을 판정한다** — 여기 적는 이름과 타입은 참고일 뿐이다.
+    form.set('file', new Blob([bytes], { type: mime }), 'attachment');
+    if (description !== undefined && description !== '') {
+      form.set('description', description);
+    }
+
+    const response = await fetch(`${this.config.origin}/api/v1/media`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await this.accessToken()}` },
+      body: form,
+    });
+
+    if (!response.ok) {
+      throw new SierraError(response.status, await response.text());
+    }
+
+    return (await response.json()) as { readonly id: string };
   }
 
   async lastPost(): Promise<number | undefined> {
