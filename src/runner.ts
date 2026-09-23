@@ -193,11 +193,18 @@ export class Fleet {
     await Promise.all(all.map(async (runner) => await runner.stop()));
   }
 
-  private spawn(bot: BotRecord): BotRunner {
-    // 이 한 줄이 봉인을 푸는 유일한 자리다 — 클라이언트 비밀은 여기서만 평문이 된다.
-    const clientSecret = this.options.sealer.open(bot.sealedClientSecret ?? '');
+  /**
+   * 그 봇의 손 — **화면이 포크의 칸을 그릴 때도 이것이 든다**(`BotPanel`).
+   *
+   * 봉인을 푸는 유일한 자리다. 아직 잇지 않은 봇이면 클라이언트 비밀이 없어 시에라 호출이
+   * 그대로 실패한다 — 부르는 쪽이 `isConnected`를 먼저 본다.
+   */
+  contextOf(bot: BotRecord): BotContext {
+    const clientSecret = bot.sealedClientSecret === undefined
+      ? ''
+      : this.options.sealer.open(bot.sealedClientSecret);
 
-    const ctx: BotContext = {
+    return {
       bot,
       sierra: new SierraClient({
         origin: bot.origin,
@@ -210,7 +217,9 @@ export class Fleet {
       dryRun: this.options.dryRun,
       log: this.options.log,
     };
+  }
 
-    return new BotRunner(ctx, this.options.brain(bot), this.options.pollMs);
+  private spawn(bot: BotRecord): BotRunner {
+    return new BotRunner(this.contextOf(bot), this.options.brain(bot), this.options.pollMs);
   }
 }

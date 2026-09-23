@@ -4,6 +4,7 @@ import type { GithubApp } from './auth.js';
 import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
 import { manifestOf } from './manifest.js';
+import { renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
 import type { AccountRecord, BotRecord, FileStore } from './state.js';
@@ -46,6 +47,8 @@ export interface WebOptions {
   readonly codeVersion: string;
   readonly maxBotsPerAccount: number;
   readonly scopes: readonly string[];
+  /** 포크가 봇 화면에 더하는 칸 — 없으면 템플릿의 것만 선다. */
+  readonly panel?: BotPanel;
   readonly log: (line: string) => void;
 }
 
@@ -154,6 +157,7 @@ async function handle(
 
   const one = /^\/bots\/([0-9a-fA-F-]{36})$/.exec(path);
   const credentials = /^\/bots\/([0-9a-fA-F-]{36})\/credentials$/.exec(path);
+  const extra = /^\/bots\/([0-9a-fA-F-]{36})\/x\/([A-Za-z0-9_-]{1,40})$/.exec(path);
 
   if (one !== null) {
     const bot = await ownBot(options, account, one[1] ?? '');
@@ -162,7 +166,37 @@ async function handle(
       return;
     }
 
-    await renderBot(response, options, bot);
+    await renderBot(response, options, bot, url.searchParams.get('said') ?? undefined);
+    return;
+  }
+
+  // **포크의 칸** — 경로는 템플릿이 쥐고 이름은 포크가 정한다.
+  if (extra !== null && request.method === 'POST') {
+    const bot = await ownBot(options, account, extra[1] ?? '');
+    if (bot === undefined || options.panel === undefined) {
+      send(response, 404, page('없다', '<p>그런 자리가 없습니다.</p>'));
+      return;
+    }
+
+    const what = extra[2] ?? '';
+    const ctx = options.fleet.contextOf(bot);
+    let said: string | undefined;
+
+    try {
+      said = what === 'settings'
+        ? await options.panel.save?.(await readForm(request), bot, ctx)
+        : await options.panel.act?.(what, bot, ctx);
+    } catch (error) {
+      send(response, 400, page('안 됐다', `
+        <p>${escapeHtml((error as Error).message)}</p>
+        <p><a href="/bots/${bot.id}">돌아가기</a></p>`));
+      return;
+    }
+
+    // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.
+    redirect(response, said === undefined
+      ? `/bots/${bot.id}`
+      : `/bots/${bot.id}?said=${encodeURIComponent(said)}`);
     return;
   }
 
@@ -249,11 +283,17 @@ async function createBot(
 }
 
 async function renderBot(
-  response: ServerResponse, options: WebOptions, bot: BotRecord,
+  response: ServerResponse, options: WebOptions, bot: BotRecord, said?: string,
 ): Promise<void> {
   const declaration = `${options.publicOrigin}/bots/${bot.id}/manifest.json`;
 
+  // 포크의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
+  const panel = options.panel !== undefined && isConnected(bot)
+    ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id)
+    : '';
+
   send(response, 200, page(escapeHtml(bot.declaration.name), `
+    ${said === undefined ? '' : `<p class="said">${escapeHtml(said)}</p>`}
     <p>${escapeHtml(bot.declaration.summary)}</p>
     <h2>1. 이 주소를 시에라에 붙인다</h2>
     <p><code>${escapeHtml(declaration)}</code></p>
@@ -270,6 +310,7 @@ async function renderBot(
       <p><label>client_secret <input name="client_secret" type="password" required></label></p>
       <p><button class="button" type="submit">맡긴다</button></p>
     </form>
+    ${panel}
     <p><a href="/">돌아가기</a></p>`));
 }
 
@@ -379,15 +420,26 @@ function page(title: string, body: string): string {
   body { max-width: 34rem; margin: 3rem auto; padding: 0 1rem;
          font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
   code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
-  input { width: 100%; padding: .4rem; font: inherit; }
+  input, select { width: 100%; padding: .4rem; font: inherit; }
+  label { display: block; }
+  small { display: block; color: #666; margin-top: .2rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 1rem 0; }
+  dt { color: #666; } dd { margin: 0; }
+  form + form { margin-top: .5rem; }
   .button, button { padding: .5rem 1rem; font: inherit; cursor: pointer;
                     border: 1px solid #1a1a1a; border-radius: .3rem;
                     background: #1a1a1a; color: #fff; text-decoration: none; display: inline-block; }
   form button:not(.button) { background: #fff; color: #1a1a1a; }
   hr { border: 0; border-top: 1px solid #ddd; margin: 2rem 0; }
+  .said { padding: .6rem .8rem; border-left: 3px solid #1a1a1a; background: #f2f2f2; }
+  /* **되돌릴 수 없는 것은 가로줄 아래에 선다** — 누르면 공개 글이 나가는 자리다. */
+  .grave { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
   @media (prefers-color-scheme: dark) {
     body { color: #e8e8e8; background: #161616; }
     code { background: #2a2a2a; }
+    .said { border-left-color: #e8e8e8; background: #2a2a2a; }
+    .grave { border-top-color: #333; }
+    small, dt { color: #9a9a9a; }
     .button, button { background: #e8e8e8; color: #161616; border-color: #e8e8e8; }
     form button:not(.button) { background: #161616; color: #e8e8e8; }
   }

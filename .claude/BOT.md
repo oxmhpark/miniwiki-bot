@@ -89,12 +89,47 @@ export interface BotBrain {
 | `runner.ts` | 템플릿 | 봇 하나의 루프(`BotRunner`)와 서 있는 봇들(`Fleet`) |
 | `state.ts`의 `botData<T>` | 템플릿이 자리, **포크가 모양** | `bots/{botId}/data.json` — 커서 말고 그 봇이 남길 것 |
 | `web.ts` | 템플릿 | 가입·봇 만들기·자격 증명·선언 |
+| `panel.ts` | **템플릿이 그린다, 포크가 선언한다** | 그 봇의 설정 칸과 단추 — 아래 *포크가 화면에 더하는 것* |
 | `service.ts` | 템플릿 | 이 전부를 세우는 `startService` |
 | `text.ts` | 템플릿 | 멘션 무력화·자르기·HTML 이스케이프 |
 | **`main.ts`** | **포크** | `BotBrain`을 주고 `startService`를 부른다 |
 | **`manifest.json`** | **포크** | 새 봇의 선언 틀 — 이름·소개·스코프 |
 | **`README.md`·`.claude/PROJECT.md`** | **포크** | 그 봇의 것. `BOT.md`는 건드리지 않는다 |
 | **(그 아래)** | **포크** | 봇이 하는 일 — 채토의 모델 호출, 에코드의 컨텐츠 풀 |
+
+### 포크가 화면에 더하는 것 — **선언하고, 그리지 않는다**
+
+봇마다 고쳐 쓸 것이 있다(에코의 발행 주기). 그것을 포크가 HTML로 그리면 **봇마다 옷이
+갈리고** 이스케이프도 단추의 무게도 저장소 수만큼 흩어진다 — 모체 `CLAUDE.md`의
+*클라이언트 디자인 규칙*이 막는 자리다. 그래서 포크가 내는 것은 **무엇이 있는가**뿐이다.
+
+```ts
+const panel: BotPanel = {
+  async describe(bot, ctx) {
+    return {
+      facts: [['풀', '3개'], ['마지막', '2시간 전']],
+      fields: [{ type: 'number', name: 'publishSeconds', label: '발행 주기',
+                 value: 3600, min: 60, unit: '초' }],
+      actions: [{ name: 'publish-now', label: '즉시 발행', grave: true }],
+    };
+  },
+  async save(values, bot, ctx) { /* fields의 name으로 들어온다 */ },
+  async act(name, bot, ctx) { /* 단추 */ },
+};
+```
+
+| 무엇 | 누가 |
+|---|---|
+| 칸의 갈래(`number`·`text`·`choice`)와 값 | **포크** |
+| HTML · 이스케이프 · 폼 주소(`x/settings`·`x/{단추}`) | **템플릿** |
+| **되돌릴 수 없는 단추를 가로줄 아래로 모으는 것**(`grave: true`) | **템플릿** |
+| 저장·단추의 처리 | **포크**(`save`·`act`) |
+
+**던지면 그 문장이 화면에 선다** — 사람이 무엇이 잘못됐는지 읽을 수 있어야 한다. 돌려준 말은
+봇 화면에 한 번 보이고 새로고침에는 남지 않는다.
+
+**아직 서지 않은 기능의 단추도 세운다**(모체 `CLAUDE.md`) — 감추면 무엇이 남았는지 볼 수
+없다. 세우되 `act`가 *아직 안 된다*고 말하면 된다.
 
 **봇이 환경 변수를 더 보면 `.env`에 적기만 한다** — 컴포즈가 `env_file`로 통째 넘기므로
 `docker-compose.yml`을 고칠 일이 없다.

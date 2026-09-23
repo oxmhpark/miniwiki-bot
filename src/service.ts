@@ -1,6 +1,7 @@
 import { readConfig } from './config.js';
 import { Sealer } from './crypto.js';
 import { DEFAULT_SCOPES } from './manifest.js';
+import type { BotPanel } from './panel.js';
 import type { BotBrain } from './runner.js';
 import { Fleet } from './runner.js';
 import type { BotRecord } from './state.js';
@@ -21,6 +22,9 @@ export interface ServiceOptions {
   readonly codeVersion: string;
   /** 이 봇이 청하는 권한. 기본은 *멘션에 답하는 봇*의 넷이다. */
   readonly scopes?: readonly string[];
+
+  /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
+  readonly panel?: BotPanel;
 }
 
 const log = (line: string): void => {
@@ -55,6 +59,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     codeVersion: options.codeVersion,
     maxBotsPerAccount: config.maxBotsPerAccount,
     scopes: options.scopes ?? DEFAULT_SCOPES,
+    ...(options.panel === undefined ? {} : { panel: options.panel }),
     log,
   });
 
