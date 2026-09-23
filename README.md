@@ -1,18 +1,21 @@
-# miniwiki-bot — 시에라에 붙는 봇의 템플릿
+# miniwiki-bot — 시에라에 붙는 봇의 라이브러리
 
-**한 배포가 봇 여럿을 지는 봇 서비스의 바탕이다.** 이 저장소를 떠서 실제 봇(`miniwiki-bot-{이름}`)을
-짓는다. 설계와 그 까닭은 [`.claude/PROJECT.md`](./.claude/PROJECT.md)에 있다.
+**한 배포가 봇 여럿을 지는 봇 서비스의 바탕이다.** 실제 봇(`miniwiki-bot-{이름}`)은 이 저장소를
+**포크하지 않고 의존한다**(2026-09-24 전환) — `vendor/bot` 서브모듈로 매달아 `file:`로 쓴다.
+설계와 그 까닭은 [`.claude/PROJECT.md`](./.claude/PROJECT.md)에 있다.
 
 - 임자가 **GitHub으로 들어와** 봇을 만들고, 그 선언 주소를 **자기 시에라의 `봇 설치`**에 붙이고,
   거기서 받은 `client_id`·`client_secret`을 **이 서비스에 맡긴다.**
 - 그러면 그 봇이 돈다. 봇마다 자기 커서·자기 시계·자기 시에라 토큰을 가진다.
 
-## 뜨기
+## 손질하기
+
+**이 저장소는 혼자 뜨지 않는다** — 라이브러리라 진입점이 없다. 실제로 도는 것을 보려면 봇
+저장소(`miniwiki-bot-echo` · `miniwiki-bot-chatto`)에서 띄운다.
 
 ```sh
-npm install
-npm run typecheck
-npm run dev
+# 이 기계에는 node가 없다 — 도구는 컨테이너 안에 있다
+docker run --rm -v "$PWD":/src -w /src node:24 sh -c "npm ci && npm run typecheck && npm test"
 ```
 
 ## 환경 변수
@@ -35,9 +38,17 @@ npm run dev
 
 **GitHub OAuth 앱의 콜백**은 `{BOT_PUBLIC_ORIGIN}/auth/github/callback`이다.
 
-## 자기 봇 짓기
+## 새 봇 짓기
 
-고치는 것은 `src/main.ts`와 그 아래뿐이다. 그리고 **`ABOUT.md`를 둔다** — 첫 화면(`/`)에
+```sh
+gh repo create oxmhpark/miniwiki-bot-{이름} --private --clone
+cd miniwiki-bot-{이름}
+git submodule add https://github.com/oxmhpark/miniwiki-bot.git vendor/bot
+cp -r vendor/bot/template/. .          # Dockerfile · compose · Procfile · manifest.json · main.ts
+npm install
+```
+
+짓는 것은 `src/main.ts`와 그 아래뿐이다. 그리고 **`ABOUT.md`를 둔다** — 첫 화면(`/`)에
 서는 소개다. 이 파일(`README.md`)은 저장소를 여는 사람의 것이라 화면이 지지 않는다.
 
 ```ts
@@ -49,8 +60,12 @@ class MyBrain implements BotBrain {
   }
 }
 
-await startService({ brain: () => new MyBrain(), codeVersion: '0.1.0' });
+await startService({
+  root: new URL('../', import.meta.url),   // 이 라이브러리가 봇의 ABOUT.md·manifest.json을 읽는 자리
+  brain: () => new MyBrain(),
+  codeVersion: '0.1.0',
+});
 ```
 
-포크와 템플릿 갱신을 받는 법은 [`.claude/PROJECT.md`](./.claude/PROJECT.md)의 *포크하는 법*에 있고,
-봇 일반의 설계는 [`.claude/BOT.md`](./.claude/BOT.md)에 있다.
+**판을 올리는 법**(`vendor/bot` 서브모듈을 옮긴다)과 봇 일반의 설계는
+[`.claude/BOT.md`](./.claude/BOT.md)의 *봇을 짓는 법*에 있다.

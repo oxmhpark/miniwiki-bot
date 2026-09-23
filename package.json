@@ -1,17 +1,30 @@
 {
   "name": "miniwiki-bot",
-  "version": "0.1.0",
-  "description": "시에라에 붙는 멀티테넌트 봇 서비스의 템플릿",
+  "version": "0.2.0",
+  "description": "시에라에 붙는 멀티테넌트 봇 서비스의 라이브러리 — 봇은 이것을 포크하지 않고 의존한다",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "files": [
+    "dist",
+    "tsconfig.base.json",
+    "template",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/main.ts",
-    "start": "node dist/main.js",
+    "prepare": "tsc",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "test": "vitest run",
-    "heroku-postbuild": "npm run build"
+    "test": "vitest run"
   },
   "license": "UNLICENSED",
-  "type": "module",
   "devDependencies": {
     "@types/node": "^24.10.1",
     "tsx": "^4.20.7",
@@ -20,9 +33,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ]
+  }
 }

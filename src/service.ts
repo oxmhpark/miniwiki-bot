@@ -20,6 +20,15 @@ import { createWebServer } from './web.js';
  */
 
 export interface ServiceOptions {
+  /**
+   * **봇 저장소의 루트** — `new URL('../', import.meta.url)`로 준다.
+   *
+   * 이 라이브러리가 봇의 `ABOUT.md`(첫 화면)와 `manifest.json`(서비스 이름)을 읽는 자리다.
+   * 라이브러리 자신을 기준으로 잡으면 `node_modules/` 안을 보게 되고, `process.cwd()`로
+   * 잡으면 **어디서 띄웠는지에 따라 달라진다** — 그래서 봇이 자기 자리를 말한다.
+   */
+  readonly root: URL;
+
   /** 봇 하나의 머리를 짓는다. */
   readonly brain: (bot: BotRecord) => BotBrain;
   /** 이 봇 프로그램의 판 — 선언의 `version` 앞자리가 된다. */
@@ -43,14 +52,18 @@ const log = (line: string): void => {
 };
 
 /**
- * 저장소의 파일 하나 — **없으면 `undefined`**.
+ * **봇 저장소의 파일 하나** — 없으면 `undefined`.
  *
- * 자리는 이 모듈을 기준으로 잡는다(`dist/service.js` → `/app`, `src/service.ts` → 저장소
- * 루트). 프로세스를 어디서 띄웠는지에 기대면 **개발에서만 서고 이미지에서는 빈다.**
+ * 자리는 봇이 `root`로 준다(`new URL('../', import.meta.url)` — `dist/main.js`에서도
+ * `src/main.ts`에서도 그 저장소의 루트다). **프로세스를 어디서 띄웠는지에 기대지 않는다**:
+ * `process.cwd()`로 잡으면 개발에서만 서고 이미지에서는 빈다.
+ *
+ * 이 라이브러리를 기준으로 잡을 수도 없다 — 그러면 `node_modules/miniwiki-bot/` 안을 보게
+ * 되고, `ABOUT.md`와 `manifest.json`은 **봇의 것**이다.
  */
-async function beside(name: string): Promise<string | undefined> {
+async function beside(root: URL, name: string): Promise<string | undefined> {
   try {
-    return await readFile(new URL(`../${name}`, import.meta.url), 'utf8');
+    return await readFile(new URL(name, root), 'utf8');
   } catch {
     return undefined;
   }
@@ -63,12 +76,12 @@ async function beside(name: string): Promise<string | undefined> {
  * `에코`) 여기 적힌 이름이 곧 그 서비스의 이름이다. 한 저장소를 여러 자리에 세우면서 이름을
  * 달리해야 할 때만 `BOT_SERVICE_NAME`을 준다.
  */
-async function serviceName(given: string | undefined): Promise<string> {
+async function serviceName(root: URL, given: string | undefined): Promise<string> {
   if (given !== undefined) {
     return given;
   }
 
-  const raw = await beside('manifest.json');
+  const raw = await beside(root, 'manifest.json');
   if (raw === undefined) {
     return '봇';
   }
@@ -112,8 +125,8 @@ export async function startService(options: ServiceOptions): Promise<void> {
    * 하는데, 첫 화면까지 그것으로 지면 **포크가 merge할 때마다 부딪힌다** — `BOT.md`와
    * `PROJECT.md`를 가른 것과 같은 까닭이다. 없으면 첫 화면은 제목과 단추만 선다.
    */
-  const about = await beside('ABOUT.md');
-  const name = await serviceName(config.serviceName);
+  const about = await beside(options.root, 'ABOUT.md');
+  const name = await serviceName(options.root, config.serviceName);
 
   const server = createWebServer({
     store,
