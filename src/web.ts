@@ -4,13 +4,15 @@ import type { GithubApp } from './auth.js';
 import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
 import { declarationChanged, manifestOf } from './manifest.js';
+import type { BotTab } from './pages.js';
 import {
-  botPage, deletePage, gatePage, homePage, newBotPage, noRoomPage, stopPage,
+  advancedTab, authTab, deletePage, featuresTab, gatePage, homePage, newBotPage, noRoomPage,
+  profileTab, stopPage,
 } from './pages.js';
 import { renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
-import type { AccountRecord, BotRecord, FileStore } from './state.js';
+import type { AccountRecord, BotDeclaration, BotRecord, FileStore } from './state.js';
 import { isConnected } from './state.js';
 import { escapeHtml } from './text.js';
 import { Tickets } from './tickets.js';
@@ -24,6 +26,7 @@ import { Tickets } from './tickets.js';
  *
  * **한 화면은 한 가지 일을 한다**(2026-09-23 요구) — 고르는 자리·짓는 자리·만지는 자리가
  * 각자 주소를 가진다. 한 장에 겹쳐 두면 봇이 셋일 때 만들기 폼이 목록을 밀어낸다.
+ * **봇 하나의 자리도 넷으로 갈린다 — 탭이 곧 주소다**(`pages.ts`).
  *
  * ```
  * GET  /healthz
@@ -33,9 +36,12 @@ import { Tickets } from './tickets.js';
  * POST /auth/logout
  * GET  /bots/new                 봇 만들기 폼
  * POST /bots                     봇을 만든다
- * GET  /bots/{id}                봇 하나 — 잇고 · 고치고 · 멈추는 자리
+ * GET  /bots/{id}                **등록정보** — 이름·소개·초상화·배경
+ * GET  /bots/{id}/features       **기능** — 그 봇 고유의 것(포크의 칸)
+ * GET  /bots/{id}/auth           **인증** — 선언 주소와 자격 증명
+ * GET  /bots/{id}/advanced       **고급** — 멈춤과 지우기
  * POST /bots/{id}/credentials    시에라에서 받은 client_id·secret을 붙인다
- * POST /bots/{id}/declaration    이름·소개를 고친다 — **선언의 판이 오른다**
+ * POST /bots/{id}/declaration    등록정보를 고친다 — **선언의 판이 오른다**
  * POST /bots/{id}/stop           폴링을 쉰다 · POST /bots/{id}/start 다시 돌린다
  * GET  /bots/{id}/delete         지우기 전에 한 번 보인다
  * POST /bots/{id}/delete         **지운다** — 이 서비스의 것까지다
@@ -188,7 +194,7 @@ async function handle(
       return;
     }
 
-    await renderBot(response, options, bot, spoken);
+    await renderTab(response, options, bot, 'profile', spoken);
     return;
   }
 
@@ -215,7 +221,7 @@ async function handle(
     }
 
     // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.
-    back(response, bot.id, line);
+    back(response, bot.id, 'features', line);
     return;
   }
 
@@ -243,6 +249,12 @@ async function botAction(
 ): Promise<void> {
   const post = request.method === 'POST';
 
+  // **탭은 GET이다** — 각자 주소를 가진 네 장이라 새로고침해도 그 자리다.
+  if (!post && (verb === 'features' || verb === 'auth' || verb === 'advanced')) {
+    await renderTab(response, options, bot, verb, said(request));
+    return;
+  }
+
   if (verb === 'credentials' && post) {
     await connectBot(request, response, options, bot);
     return;
@@ -259,7 +271,7 @@ async function botAction(
     await options.fleet.sync();
     options.log(`봇 ${bot.id}이(가) ${verb === 'stop' ? '멈췄다' : '다시 돈다'}`);
 
-    back(response, bot.id, verb === 'stop' ? '멈췄습니다.' : '다시 돕니다.');
+    back(response, bot.id, 'advanced', verb === 'stop' ? '멈췄습니다.' : '다시 돕니다.');
     return;
   }
 
@@ -274,6 +286,11 @@ async function botAction(
   }
 
   send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', `/bots/${bot.id}`));
+}
+
+/** 주소에 실려 온 한 마디 — 탭을 옮겨도 같은 자리에서 읽는다. */
+function said(request: IncomingMessage): string | undefined {
+  return new URL(request.url ?? '/', 'http://x').searchParams.get('said') ?? undefined;
 }
 
 /** **임자의 것인지 본다** — id를 아는 것만으로 남의 봇을 만지지 못한다. */
@@ -316,7 +333,8 @@ async function createBot(
   await options.store.saveBot(bot);
   options.log(`봇 ${bot.id}이(가) 섰다 — ${origin}`);
 
-  redirect(response, `/bots/${bot.id}`);
+  // **만든 직후에 급한 것은 잇는 일이다** — 등록정보는 이미 적었다.
+  redirect(response, `/bots/${bot.id}/auth`);
 }
 
 /**
@@ -336,7 +354,16 @@ async function editDeclaration(
   const summary = (form.get('summary') ?? '').trim();
 
   if (name === '' || summary === '') {
-    back(response, bot.id, '이름과 소개가 있어야 합니다.');
+    back(response, bot.id, 'profile', '이름과 소개가 있어야 합니다.');
+    return;
+  }
+
+  // **비우면 지운다** — 빈 칸과 *안 적은 것*이 갈리면 초상화를 내릴 길이 없다.
+  const avatar = picture(form.get('avatar') ?? '');
+  const header = picture(form.get('header') ?? '');
+
+  if (avatar === false || header === false) {
+    back(response, bot.id, 'profile', '초상화와 배경은 http나 https 주소여야 합니다.');
     return;
   }
 
@@ -344,18 +371,24 @@ async function editDeclaration(
   if (!isConnected(bot)) {
     const asked = cleanOrigin(form.get('origin') ?? '');
     if (asked === undefined) {
-      back(response, bot.id, '시에라 주소는 https여야 합니다.');
+      back(response, bot.id, 'profile', '시에라 주소는 https여야 합니다.');
       return;
     }
 
     origin = asked;
   }
 
-  const declaration = { ...bot.declaration, name, summary };
+  const declaration: BotDeclaration = {
+    name,
+    summary,
+    ...(avatar === undefined ? {} : { avatar }),
+    ...(header === undefined ? {} : { header }),
+  };
+
   const moved = declarationChanged(bot.declaration, declaration);
 
   if (!moved && origin === bot.origin) {
-    back(response, bot.id, '바뀐 것이 없습니다.');
+    back(response, bot.id, 'profile', '바뀐 것이 없습니다.');
     return;
   }
 
@@ -366,7 +399,7 @@ async function editDeclaration(
     settingsVersion: moved ? bot.settingsVersion + 1 : bot.settingsVersion,
   });
 
-  back(response, bot.id, moved && isConnected(bot)
+  back(response, bot.id, 'profile', moved && isConnected(bot)
     ? '고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다.'
     : '고쳤습니다.');
 }
@@ -394,20 +427,31 @@ async function deleteBot(
   redirect(response, `/?said=${encodeURIComponent(`${bot.declaration.name}을(를) 지웠습니다.`)}`);
 }
 
-async function renderBot(
-  response: ServerResponse, options: WebOptions, bot: BotRecord, line?: string,
+/** 탭 하나를 그린다 — **어느 장인지는 주소가 정하고, 머리와 탭 줄은 `pages.ts`가 진다.** */
+async function renderTab(
+  response: ServerResponse, options: WebOptions, bot: BotRecord, tab: BotTab, line?: string,
 ): Promise<void> {
+  if (tab === 'profile') {
+    send(response, 200, profileTab(bot, line));
+    return;
+  }
+
+  if (tab === 'auth') {
+    send(response, 200, authTab(bot, `${options.publicOrigin}/bots/${bot.id}/manifest.json`, line));
+    return;
+  }
+
+  if (tab === 'advanced') {
+    send(response, 200, advancedTab(bot, line));
+    return;
+  }
+
   // 포크의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
   const panel = options.panel !== undefined && isConnected(bot)
     ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id)
     : '';
 
-  send(response, 200, botPage({
-    bot,
-    declarationUrl: `${options.publicOrigin}/bots/${bot.id}/manifest.json`,
-    panel,
-    ...(line === undefined ? {} : { line }),
-  }));
+  send(response, 200, featuresTab(bot, panel, line));
 }
 
 /**
@@ -424,7 +468,7 @@ async function connectBot(
   const clientSecret = (form.get('client_secret') ?? '').trim();
 
   if (clientId === '' || clientSecret === '') {
-    back(response, bot.id, '둘 다 있어야 합니다.');
+    back(response, bot.id, 'auth', '둘 다 있어야 합니다.');
     return;
   }
 
@@ -460,10 +504,25 @@ async function connectBot(
   await options.fleet.sync();
   options.log(`봇 ${bot.id}이(가) ${bot.origin}의 @${handle}로 이어졌다`);
 
-  back(response, bot.id, `@${handle}로 이어졌습니다.`);
+  back(response, bot.id, 'auth', `@${handle}로 이어졌습니다.`);
 }
 
 // ── 잡일 ──────────────────────────────────────────────────────────────────
+
+/**
+ * 그림의 주소 — 비었으면 `undefined`, 아니면 `http(s)`여야 하고 **틀리면 `false`**.
+ *
+ * **코어가 한 번 닿을 수 있는 공개 주소여야 한다.** 코어는 이 주소를 받아 자기 것으로 만들고
+ * (`ApplyManifestAsync`), 못 받아도 봇은 선다 — 기본 얼굴이 서고 임자가 나중에 올린다.
+ */
+function picture(raw: string): string | undefined | false {
+  const url = raw.trim();
+  if (url === '') {
+    return undefined;
+  }
+
+  return /^https?:\/\/[^\s/]+\/?/.test(url) ? url : false;
+}
 
 /** 끝의 `/`를 떼고 https인지 본다 — **아니면 `undefined`**. */
 function cleanOrigin(raw: string): string | undefined {
@@ -471,11 +530,14 @@ function cleanOrigin(raw: string): string | undefined {
   return /^https:\/\/[^\s/]+$/.test(origin) ? origin : undefined;
 }
 
-/** 봇 화면으로 돌려보낸다 — **한 말은 주소에 싣고 새로고침에는 남기지 않는다**. */
-function back(response: ServerResponse, botId: string, line?: string): void {
-  redirect(response, line === undefined
-    ? `/bots/${botId}`
-    : `/bots/${botId}?said=${encodeURIComponent(line)}`);
+/**
+ * **온 탭으로 돌려보낸다** — 한 말은 주소에 싣고 새로고침에는 남기지 않는다.
+ *
+ * 폼을 낸 탭이 아니라 첫 장으로 떨어지면 사람이 *저장이 됐나*를 두 번 확인하게 된다.
+ */
+function back(response: ServerResponse, botId: string, tab: BotTab, line?: string): void {
+  const at = `/bots/${botId}${tab === 'profile' ? '' : `/${tab}`}`;
+  redirect(response, line === undefined ? at : `${at}?said=${encodeURIComponent(line)}`);
 }
 
 function cookie(request: IncomingMessage): string | undefined {

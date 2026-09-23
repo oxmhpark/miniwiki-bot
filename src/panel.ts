@@ -64,7 +64,12 @@ export interface BotAction {
 
 /** 봇 화면에 설 것들 — **포크가 내고 템플릿이 그린다**. */
 export interface PanelView {
-  /** 칸의 제목. 없으면 *이 봇의 설정*이다. */
+  /**
+   * 칸의 제목 — **없으면 제목을 그리지 않는다**.
+   *
+   * 이 칸은 봇 화면의 *기능* 탭에 서고 탭 줄이 이미 그 이름을 지고 있다. 기본 제목을 두면
+   * 탭 바로 아래에 같은 말이 한 번 더 선다.
+   */
   readonly title?: string;
 
   /** 읽기만 하는 것들 — 풀에 몇 개, 마지막으로 언제 냈나. */
@@ -149,7 +154,7 @@ export function renderPanel(view: PanelView, botId: string): string {
   const plain = buttons.filter((one) => one.grave !== true).map(draw).join('');
   const grave = buttons.filter((one) => one.grave === true).map(draw).join('');
 
-  return `<h2>${esc(view.title ?? '이 봇의 설정')}</h2>
+  return `${view.title === undefined ? '' : `<h2>${esc(view.title)}</h2>`}
     ${facts}${fields}${plain}
     ${grave === '' ? '' : `<div class="grave">${grave}</div>`}`;
 }

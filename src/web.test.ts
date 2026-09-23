@@ -124,7 +124,11 @@ async function makeBot(browser: Browser, name = '에코'): Promise<string> {
 
   expect(made.status).toBe(302);
 
-  return (made.headers.get('location') ?? '').replace('/bots/', '');
+  // **만든 직후에는 인증으로 보낸다** — 급한 것이 잇는 일이다.
+  const at = made.headers.get('location') ?? '';
+  expect(at).toMatch(/\/auth$/);
+
+  return at.replace('/bots/', '').replace('/auth', '');
 }
 
 test('목록과 만들기가 갈려 있다 — 목록에는 폼이 없다', async () => {
@@ -166,6 +170,77 @@ test('만들다 틀리면 적은 것이 남는다', async () => {
   expect(said).toContain('https');
 });
 
+test('봇 하나의 자리가 넷으로 갈린다 — 탭이 곧 주소다', async () => {
+  const browser = await signIn();
+  const id = await makeBot(browser);
+
+  const profile = await (await browser.get(`/bots/${id}`)).text();
+  const features = await (await browser.get(`/bots/${id}/features`)).text();
+  const auth = await (await browser.get(`/bots/${id}/auth`)).text();
+  const advanced = await (await browser.get(`/bots/${id}/advanced`)).text();
+
+  // 넷 다 같은 탭 줄을 지고, 자기 자리에만 표를 세운다.
+  for (const [where, page] of [
+    [`/bots/${id}"`, profile], [`/bots/${id}/features"`, features],
+    [`/bots/${id}/auth"`, auth], [`/bots/${id}/advanced"`, advanced],
+  ] as const) {
+    expect(page).toContain('등록정보');
+    expect(page).toContain(`<a href="${where} aria-current="page"`);
+  }
+
+  // 자리마다 자기 것만 진다.
+  expect(profile).toContain('초상화');
+  expect(profile).not.toContain('client_secret');
+  expect(auth).toContain('client_secret');
+  expect(auth).toContain('manifest.json');
+  expect(advanced).toContain('지우러 간다');
+  expect(features).toContain('이은 뒤에 섭니다');
+});
+
+test('커스텀 필드는 자리를 세우고 아직 안 선다고 말한다', async () => {
+  const browser = await signIn();
+  const id = await makeBot(browser);
+
+  const profile = await (await browser.get(`/bots/${id}`)).text();
+  expect(profile).toContain('커스텀 필드');
+  expect(profile).toContain('아직 서지 않았습니다');
+  expect(profile).toContain('disabled');
+});
+
+test('초상화와 배경은 선언으로 나간다 — 비우면 지워진다', async () => {
+  const browser = await signIn();
+  const id = await makeBot(browser);
+
+  const same = { name: '에코', summary: '되받는다', origin: 'https://kbtest.codemach.net' };
+
+  await browser.post(`/bots/${id}/declaration`, {
+    ...same, avatar: 'https://cdn.example/a.png', header: 'https://cdn.example/h.png',
+  });
+
+  const manifest = await (await browser.get(`/bots/${id}/manifest.json`)).json() as {
+    readonly avatar?: string; readonly header?: string; readonly version: string;
+  };
+
+  expect(manifest.avatar).toBe('https://cdn.example/a.png');
+  expect(manifest.header).toBe('https://cdn.example/h.png');
+  expect(manifest.version).toBe('0.1.0+2');
+
+  // **비우면 지운다** — 빈 칸과 *안 적은 것*이 갈리면 초상화를 내릴 길이 없다.
+  await browser.post(`/bots/${id}/declaration`, { ...same, avatar: '', header: '' });
+
+  const bare = await (await browser.get(`/bots/${id}/manifest.json`)).json() as {
+    readonly avatar?: string; readonly version: string;
+  };
+
+  expect(bare.avatar).toBeUndefined();
+  expect(bare.version).toBe('0.1.0+3');
+
+  // 주소가 아니면 받지 않는다.
+  await browser.post(`/bots/${id}/declaration`, { ...same, avatar: '그림' });
+  expect((await store.bot(id))?.declaration.avatar).toBeUndefined();
+  expect((await store.bot(id))?.settingsVersion).toBe(3);
+});
+
 test('선언을 고치면 판이 오른다', async () => {
   const browser = await signIn();
   const id = await makeBot(browser);
@@ -192,7 +267,8 @@ test('멈추고 다시 돌린다', async () => {
   const browser = await signIn();
   const id = await makeBot(browser);
 
-  await browser.post(`/bots/${id}/stop`);
+  const stopped = await browser.post(`/bots/${id}/stop`);
+  expect(stopped.headers.get('location')).toContain('/advanced');
   expect((await store.bot(id))?.stopped).toBe(true);
 
   await browser.post(`/bots/${id}/start`);
