@@ -1,0 +1,6 @@
+{
+  "version": "0.1.0",
+  "name": "봇",
+  "summary": "이것은 새 봇의 틀입니다. 실제로 코어가 읽는 선언은 봇마다 다르며 /bots/{botId}/manifest.json에서 납니다.",
+  "scopes": ["read:notifications", "read:posts", "write:posts", "read:accounts"]
+}

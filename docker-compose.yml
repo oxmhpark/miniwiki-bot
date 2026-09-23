@@ -1,0 +1,46 @@
+# 봇 서비스 단독 스택 — **다른 스택 파일 집합과 겹치지 않는다**.
+#
+# 봇은 코어 밖의 프로그램이라 시에라와 한 컴포즈에 실리지 않는다(`PROJECT.md`).
+# 다른 기계에서 이 파일 하나만 있으면 돈다 — 이미지도 여기서 굽는다.
+#
+#     docker compose --env-file .env up -d --build
+#
+# **앞단(TLS)은 사람 몫이다** — `BOT_PUBLIC_ORIGIN`이 가리키는 공개 HTTPS 주소가
+# `BOT_BIND`(기본 127.0.0.1:8080)로 들어오게 리버스 프록시를 세운다. 코어의
+# `PrivateAddressGuard`가 사설 주소의 `manifest.json`을 막으므로 공개 주소가 아니면 설치가 안 된다.
+#
+# **붙는 시에라는 여기 없다.** 그것은 봇마다 다르고 사람이 화면에서 만드는 것이라 상태에 산다 —
+# 환경에 `_SIERRA_ORIGIN`이 있으면 그 배포는 테넌트 하나짜리다.
+
+services:
+  bot:
+    build: .
+    image: ${BOT_IMAGE:-bot:local}
+    container_name: ${BOT_NAME:-bot}
+    restart: unless-stopped
+
+    environment:
+      BOT_SECRET: ${BOT_SECRET}
+      BOT_PUBLIC_ORIGIN: ${BOT_PUBLIC_ORIGIN}
+      BOT_GITHUB_CLIENT_ID: ${BOT_GITHUB_CLIENT_ID}
+      BOT_GITHUB_CLIENT_SECRET: ${BOT_GITHUB_CLIENT_SECRET}
+      BOT_POLL_SECONDS: ${BOT_POLL_SECONDS:-30}
+      BOT_MAX_PER_ACCOUNT: ${BOT_MAX_PER_ACCOUNT:-3}
+      BOT_DRY_RUN: ${BOT_DRY_RUN:-false}
+
+    ports:
+      - "${BOT_BIND:-127.0.0.1:8080}:8080"
+
+    # **상태는 볼륨에 남는다** — 계정·봇·봉한 자격 증명·커서·맡긴 것. 잃으면 임자가 봇을
+    # 처음부터 다시 잇고 사람마다 다시 맡긴다.
+    volumes:
+      - bot-state:/app/state
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot-state:
