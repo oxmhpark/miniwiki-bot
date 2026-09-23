@@ -19,6 +19,12 @@ services:
     container_name: ${BOT_NAME:-bot}
     restart: unless-stopped
 
+    # **포크의 환경 변수가 여기로 들어온다** — 봇이 무엇을 더 보는지는 봇마다 다르므로
+    # (에코의 `ECHO_POOL_GROUP` 같은 것) 템플릿이 목록을 고정하지 않는다. 아래 `environment`는
+    # **기본값이 있는 것들**이고, 같은 이름이 양쪽에 있으면 `environment`가 이긴다.
+    env_file:
+      - .env
+
     environment:
       BOT_SECRET: ${BOT_SECRET}
       BOT_PUBLIC_ORIGIN: ${BOT_PUBLIC_ORIGIN}

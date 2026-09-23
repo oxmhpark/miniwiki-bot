@@ -92,7 +92,12 @@ export interface BotBrain {
 | `service.ts` | 템플릿 | 이 전부를 세우는 `startService` |
 | `text.ts` | 템플릿 | 멘션 무력화·자르기·HTML 이스케이프 |
 | **`main.ts`** | **포크** | `BotBrain`을 주고 `startService`를 부른다 |
+| **`manifest.json`** | **포크** | 새 봇의 선언 틀 — 이름·소개·스코프 |
+| **`README.md`·`.claude/PROJECT.md`** | **포크** | 그 봇의 것. `BOT.md`는 건드리지 않는다 |
 | **(그 아래)** | **포크** | 봇이 하는 일 — 채토의 모델 호출, 에코드의 컨텐츠 풀 |
+
+**봇이 환경 변수를 더 보면 `.env`에 적기만 한다** — 컴포즈가 `env_file`로 통째 넘기므로
+`docker-compose.yml`을 고칠 일이 없다.
 
 **포크가 템플릿 파일을 고쳐야 한다면 그것은 템플릿의 결함이다.** 고칠 것이 생기면 여기서
 고치고 `upstream`으로 내려보낸다 — 포크마다 갈라지면 템플릿인 뜻이 없다.
