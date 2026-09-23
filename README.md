@@ -1,8 +1,9 @@
 # miniwiki-bot — 시에라에 붙는 봇의 라이브러리
 
 **한 배포가 봇 여럿을 지는 봇 서비스의 바탕이다.** 실제 봇(`miniwiki-bot-{이름}`)은 이 저장소를
-**포크하지 않고 의존한다**(2026-09-24 전환) — `vendor/bot` 서브모듈로 매달아 `file:`로 쓴다.
-설계와 그 까닭은 [`.claude/PROJECT.md`](./.claude/PROJECT.md)에 있다.
+**포크하지 않고 의존한다**(2026-09-24 전환) — `github:oxmhpark/miniwiki-bot#v0.3.0`.
+설계와 그 까닭은 [`.claude/PROJECT.md`](./.claude/PROJECT.md), 봇 일반의 것은
+[`.claude/BOT.md`](./.claude/BOT.md)에 있다.
 
 - 임자가 **GitHub으로 들어와** 봇을 만들고, 그 선언 주소를 **자기 시에라의 `봇 설치`**에 붙이고,
   거기서 받은 `client_id`·`client_secret`을 **이 서비스에 맡긴다.**
@@ -43,9 +44,8 @@ docker run --rm -v "$PWD":/src -w /src node:24 sh -c "npm ci && npm run typechec
 ```sh
 gh repo create oxmhpark/miniwiki-bot-{이름} --private --clone
 cd miniwiki-bot-{이름}
-git submodule add https://github.com/oxmhpark/miniwiki-bot.git vendor/bot
-cp -r vendor/bot/template/. .          # Dockerfile · compose · Procfile · manifest.json · main.ts
-npm install
+npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.3.0
+cp -r node_modules/miniwiki-bot/template/. .   # Dockerfile · compose · Procfile · manifest.json · main.ts
 ```
 
 짓는 것은 `src/main.ts`와 그 아래뿐이다. 그리고 **`ABOUT.md`를 둔다** — 첫 화면(`/`)에
@@ -67,5 +67,5 @@ await startService({
 });
 ```
 
-**판을 올리는 법**(`vendor/bot` 서브모듈을 옮긴다)과 봇 일반의 설계는
+**판을 올리는 법**(태그를 가리킨다)과 봇 일반의 설계는
 [`.claude/BOT.md`](./.claude/BOT.md)의 *봇을 짓는 법*에 있다.

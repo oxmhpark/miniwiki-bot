@@ -5,8 +5,8 @@
 #
 #     docker build -t bot:local .
 #
-# **라이브러리는 빌드 컨텍스트 안에 있다**(`vendor/bot` 서브모듈). 저장소가 비공개여도
-# 빌드에 토큰이 들지 않는다 — 그것이 `file:` 의존을 고른 까닭이다(`.claude/BOT.md`).
+# **라이브러리는 보통 의존이다**(`miniwiki-bot`). 공개 저장소라 `npm ci`가 그냥 받아 온다 —
+# 토큰도, 빌드 컨텍스트에 끌어다 둘 것도 없다(`.claude/BOT.md`의 *봇을 짓는 법*).
 #
 # **듣는다**(가입·봇 등록·봇마다의 `manifest.json`) — 그래서 포트를 연다.
 
@@ -14,15 +14,11 @@ FROM node:24-alpine AS build
 WORKDIR /src
 
 COPY package.json package-lock.json ./
-# 라이브러리가 먼저 와야 한다 — `file:` 의존이라 설치가 이 폴더를 읽는다.
-COPY vendor/ ./vendor/
 RUN npm ci --no-audit --no-fund
 
 COPY tsconfig*.json ./
 COPY src/ ./src/
-# **`--ignore-scripts`가 있어야 한다** — `prune`은 링크된 패키지의 `prepare`를 다시 돌리는데,
-# 그때는 그 패키지의 `typescript`가 이미 정리된 뒤라 `tsc: not found`로 죽는다.
-RUN npm run build && npm prune --omit=dev --ignore-scripts && rm -rf vendor/*/node_modules
+RUN npm run build && npm prune --omit=dev
 
 FROM node:24-alpine AS final
 WORKDIR /app
@@ -31,8 +27,6 @@ ENV NODE_ENV=production
 
 COPY --from=build --chown=node:node /src/dist ./dist
 COPY --from=build --chown=node:node /src/node_modules ./node_modules
-# `node_modules/miniwiki-bot`은 `../vendor/bot`을 가리키는 **상대 심링크**다 — 함께 옮긴다.
-COPY --from=build --chown=node:node /src/vendor ./vendor
 # **첫 화면이 `ABOUT.md`를 그린다** — 포크가 두는 파일이라 **템플릿에는 없다**.
 #
 # 그래서 글롭으로 받는다(`ABOUT.m[d]`) — 도커의 `COPY`는 없는 파일을 지목하면 그 자리에서

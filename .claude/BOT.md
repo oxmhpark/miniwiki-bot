@@ -1,8 +1,9 @@
 # 봇 일반 — 시에라에 붙는 봇이 지키는 것
 
 > **이 파일은 라이브러리(`miniwiki-bot`)의 것이다.** 봇 저장소는 이것을 복사해 두지 않고
-> 서브모듈로 매달아 읽는다(`vendor/bot/.claude/BOT.md`) — **사본이 없으니 어긋날 일도 없다.**
-> 그 봇만의 것은 그 저장소의 `.claude/PROJECT.md`에 적는다.
+> 설치된 패키지에서 읽는다(`node_modules/miniwiki-bot/.claude/BOT.md`) 또는
+> [GitHub](https://github.com/oxmhpark/miniwiki-bot/blob/main/.claude/BOT.md)에서 본다 —
+> **사본이 없으니 어긋날 일도 없다.** 그 봇만의 것은 그 저장소의 `.claude/PROJECT.md`에 적는다.
 >
 > - 통합 지침·마일스톤: 모체 저장소 [`miniwiki`](https://github.com/oxmhpark/miniwiki)의
 >   `.claude/` (모체 아래 놓였을 때는 [`../../.claude/PROJECT.md`](../../.claude/PROJECT.md))
@@ -181,12 +182,11 @@
 ```sh
 gh repo create oxmhpark/miniwiki-bot-{이름} --private --clone
 cd miniwiki-bot-{이름}
-git submodule add https://github.com/oxmhpark/miniwiki-bot.git vendor/bot
-cp -r vendor/bot/template/. .          # Dockerfile · compose · Procfile · manifest.json · main.ts
-npm install                            # package.json의 "miniwiki-bot": "file:./vendor/bot"
+npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.3.0
+cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · Procfile · manifest.json · main.ts
 ```
 
-**2026-09-24까지는 포크였다.** 템플릿 저장소를 clone해 파일 열일곱 개를 복사해 두고, 템플릿이
+**2026-09-24까지는 포크였다.** 라이브러리 저장소를 clone해 파일 열일곱 개를 복사해 두고,
 나아지면 `git merge upstream/main`으로 받았다. 그 방식이 덜컹거린 자리는 셋이었다:
 
 - **`.claude/PROJECT.md`가 merge마다 부딪혔다** — 그 파일은 각 저장소의 것이라 양쪽이 자기
@@ -198,24 +198,30 @@ npm install                            # package.json의 "miniwiki-bot": "file:.
 
 **의존으로 바꾸니 셋 다 사라졌다.** 봇 저장소에는 자기 코드만 남는다.
 
-### 왜 `file:` 서브모듈인가 — **비공개 저장소이기 때문이다**
-
-저장소가 전부 비공개라 `github:` 의존이나 레지스트리 발행은 **도커 빌드 안에 토큰을 넣어야**
-한다. 서브모듈은 빌드 컨텍스트에 이미 들어와 있어 **인증이 아예 들지 않는다**.
+### 왜 git 태그 의존인가 — **라이브러리가 공개이기 때문이다**
 
 ```json
-"dependencies": { "miniwiki-bot": "file:./vendor/bot" }
+"dependencies": { "miniwiki-bot": "github:oxmhpark/miniwiki-bot#v0.3.0" }
 ```
 
-- **판은 서브모듈 커밋이다.** 올릴 때: `git -C vendor/bot fetch && git -C vendor/bot checkout <sha>`
-  그리고 `git add vendor/bot && npm install`.
+`miniwiki-bot`은 **공개 저장소**다(2026-09-24). 그래서 `npm ci`가 **인증 없이** 받아 오고,
+도커 빌드에 토큰을 넘길 일도 빌드 컨텍스트에 라이브러리를 끌어다 둘 일도 없다. **봇 저장소는
+비공개로 남는다** — 공개인 것은 라이브러리뿐이다.
+
+> 그 사이에 **`file:` + `vendor/bot` 서브모듈**을 한나절 썼다(2026-09-24). 저장소가 전부
+> 비공개일 때 도커 빌드의 인증을 피하는 길이었지만, 대가가 Dockerfile에 남았다 — 상대 심링크
+> 때문에 `vendor/`를 최종 이미지에 함께 옮겨야 했고, `npm prune`이 링크된 패키지의 `prepare`를
+> 다시 돌려 `--ignore-scripts`가 필요했다. **라이브러리를 공개로 바꾸면서 그 둘 다 사라졌다.**
+
+- **판은 태그다.** 라이브러리에서 `npm version minor && git push --follow-tags`, 봇에서
+  `npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.4.0`.
+- **`package-lock.json`에 커밋 sha가 박힌다** — 태그를 옮겨도 봇은 받던 것을 계속 받는다.
 - **`dist`는 저장소에 없다.** 설치할 때 라이브러리의 `prepare`가 `tsc`를 돌려 만든다.
-- **`npm ci`가 만드는 것은 상대 심링크**(`node_modules/miniwiki-bot → ../vendor/bot`)다. 그래서
-  최종 이미지에 **`vendor/`도 함께 옮겨야** 한다(`template/Dockerfile`).
-- **`npm prune`에는 `--ignore-scripts`가 든다.** 그러지 않으면 링크된 패키지의 `prepare`를
-  다시 돌리는데, 그때는 그 패키지의 `typescript`가 이미 정리된 뒤라 `tsc: not found`로 죽는다.
 - **`tsconfig.base.json`도 라이브러리가 낸다** — `"extends": "miniwiki-bot/tsconfig.base.json"`.
-  복제가 하나 더 줄었다.
+  복제가 하나 줄었다.
+- **이름은 `miniwiki-bot` 그대로다**(2026-09-24 결정). `miniwiki-sierra-*`는 **코어의 확장**이
+  쓰는 자리이고(일곱 개), 봇은 코어가 존재를 모르는 바깥 프로그램이라 그 접두를 쓰지 않는다 —
+  모체 `PROJECT.md`의 *이름이 층을 진다*. 밖에서 무엇인지 말하는 일은 저장소 description이 한다.
 
 ### 판을 올릴 때 검사가 깨지는 것은 정상이다
 
