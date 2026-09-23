@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { renderMarkdown } from './markdown.js';
+import { renderMarkdown, withoutTitle } from './markdown.js';
 
 /**
  * **첫 화면이 `ABOUT.md`를 그린다** — 그 문서가 화면에서 어떻게 서는지가 여기 있다.
@@ -8,9 +8,19 @@ import { renderMarkdown } from './markdown.js';
  * 나가는 주소만 링크가 된다.
  */
 
-test('제목은 한 단 내려간다 — 화면의 h1은 제목줄의 것이다', () => {
+test('그 문서의 가장 높은 제목이 h2가 된다 — 화면의 h1은 제목줄의 것이다', () => {
   expect(renderMarkdown('# 에코\n\n## 환경 변수'))
     .toBe('<h2>에코</h2>\n<h3>환경 변수</h3>');
+
+  // 맨 앞 제목을 걷어 낸 문서도 `##`부터 제 높이로 선다.
+  expect(renderMarkdown('## 환경 변수\n\n### 그 아래'))
+    .toBe('<h2>환경 변수</h2>\n<h3>그 아래</h3>');
+});
+
+test('맨 앞 제목은 걷는다 — 제목줄이 이미 그 자리를 진다', () => {
+  expect(withoutTitle('# 에코\n\n**한 줄.**')).toBe('**한 줄.**');
+  // 제목이 아닌 문서는 그대로다.
+  expect(withoutTitle('**한 줄.**\n\n# 뒤의 제목')).toBe('**한 줄.**\n\n# 뒤의 제목');
 });
 
 test('표는 자기 안에서 흐른다', () => {

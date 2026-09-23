@@ -18,9 +18,28 @@ import { escapeHtml } from './text.js';
 /** 줄 안의 코드를 잠시 빼 두는 자리 — 그 안에서는 `**`도 그냥 별이다. */
 const HOLD = '\u0000';
 
+/**
+ * 문서 맨 앞의 제목 한 줄을 걷는다 — **화면의 제목줄이 이미 그 자리를 진다**.
+ *
+ * `ABOUT.md`는 문서로서 `# 이름`으로 시작하는 것이 자연스럽지만, 그대로 그리면 같은 말이 두
+ * 번 선다(제목줄의 `에코` 바로 아래 `에코`).
+ */
+export function withoutTitle(source: string): string {
+  return source.replace(/^\s*#\s+.*(\r?\n)+/, '');
+}
+
 export function renderMarkdown(source: string): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const out: string[] = [];
+
+  /*
+   * **그 문서의 가장 높은 제목이 `h2`가 된다.** 화면의 `h1`은 제목줄의 것이라 문서가 그
+   * 자리를 다시 쓰지 않고, 맨 앞 제목을 걷어 낸 문서(`withoutTitle`)도 `##`부터 제 높이로
+   * 선다 — 고정으로 한 단씩 내리면 그런 문서의 절이 통째로 한 칸 낮아진다.
+   */
+  const top = Math.min(...lines
+    .map((one) => /^(#{1,6})\s+/.exec(one)?.[1]?.length ?? 9)
+    .filter((n) => n < 9), 9);
 
   let at = 0;
   while (at < lines.length) {
@@ -54,8 +73,7 @@ export function renderMarkdown(source: string): string {
 
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading !== null) {
-      // **한 단씩 내려 그린다** — 화면의 `h1`은 제목줄의 것이라 문서가 그 자리를 다시 쓰지 않는다.
-      const level = Math.min((heading[1] ?? '#').length + 1, 6);
+      const level = Math.min((heading[1] ?? '#').length - top + 2, 6);
       at += 1;
       out.push(`<h${level}>${inline(heading[2] ?? '')}</h${level}>`);
       continue;

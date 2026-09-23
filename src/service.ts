@@ -7,7 +7,7 @@ import type { BotBrain } from './runner.js';
 import { Fleet } from './runner.js';
 import type { BotRecord } from './state.js';
 import { FileStore } from './state.js';
-import { renderMarkdown } from './markdown.js';
+import { renderMarkdown, withoutTitle } from './markdown.js';
 import { createWebServer } from './web.js';
 
 /**
@@ -111,7 +111,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     maxBotsPerAccount: config.maxBotsPerAccount,
     scopes: options.scopes ?? DEFAULT_SCOPES,
     serviceName: name,
-    about: about === undefined ? '' : renderMarkdown(about),
+    about: about === undefined ? '' : renderMarkdown(withoutTitle(about)),
     ...(options.panel === undefined ? {} : { panel: options.panel }),
     log,
   });
