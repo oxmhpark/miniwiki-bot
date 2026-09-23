@@ -153,7 +153,7 @@ const panel: BotPanel = {
 | 글의 id | 알림의 `href`(`/@아이디/{id}`) 끝 — 알림에 글 객체가 없다 |
 | 쓰레드 | `GET /api/v1/posts/{id}/context` — 평평한 목록, `in_reply_to`로 사슬을 짠다 |
 | 메시지함 | `GET /api/v1/messages?since_id=…` — **알림과 달리 `since_id`가 있다**(알림에는 `max_id`뿐이라 *새것만*을 물을 수 없다) |
-| 한 사람 | `GET /api/v1/accounts/{id}` — **그룹을 아는 유일한 자리** |
+| 한 사람 | `GET /api/v1/accounts/{id}` — **그룹과 `is_bot`을 아는 유일한 자리**. 답이 `{account, relationship, is_bot}`으로 **감싸여 온다**(`AccountProfileView`) — `groups`는 `account` 안에 있다 |
 | 공개 글 | `POST /api/v1/posts` `{body, visibility}`. `public`은 **코어에 없는 이름**이다 |
 | 내 마지막 글 | `GET /api/v1/accounts/{나}/posts?limit=1` — `read:feeds`가 든다(계정의 글은 *목록*의 권한을 탄다) |
 | 답글 | `POST /api/v1/posts` `{body, in_reply_to}` — **`visibility`·`recipients`를 싣지 않는다**(뿌리를 상속한다, M25) |
@@ -168,6 +168,11 @@ const panel: BotPanel = {
 **글·메시지의 작성자에는 그룹이 실리지 않는다** — 코어의 `PostProjection`이 `AccountView`의
 위치 인자 넷과 `badge_html`만 채우고 `groups`는 비운 채 둔다. 그룹으로 무언가를 가르는 봇은
 **작성자마다 `GET /api/v1/accounts/{id}`를 한 번 더** 불러야 한다(캐시할 값이다).
+
+**그 답은 계정을 감싸고 있다** — `{account, relationship, moved_to, is_bot}`. `groups`는
+`account` 안이라 **최상위에서 읽으면 늘 `undefined`**이고, 그러면 아무도 걸러 내지 못한 채
+조용히 논다(2026-09-23에 에코가 그렇게 막혔다). `is_bot`도 여기 있다 — 글·알림의 계정 한
+칸에는 없으므로 봇끼리 핑퐁을 막으려면 이 조회가 든다.
 
 **그리고 뱃지를 끈 그룹은 봇에게 보이지 않는다.** 코어는 `GroupProfile.Badge`가 **꺼진**
 그룹을 `Permission.Groups` 권한자가 아닌 모두에게서 가린다(39 확정 2) — 봇은 보통 그 권한이

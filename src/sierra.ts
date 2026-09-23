@@ -26,12 +26,32 @@ export interface AccountRef {
    * 그 사람이 속한 그룹들 — **프로필을 묻는 자리에서만 찬다**.
    *
    * <b>글·메시지의 작성자에는 실리지 않는다</b>(코어의 `PostProjection`은 `badge_html`만
-   * 채운다). 그룹으로 무언가를 가르려면 `account(id)`를 따로 불러야 한다.
+   * 채운다). 그룹으로 무언가를 가르려면 `account(id)`를 따로 부르고 <b>그 답의 `account`
+   * 안에서</b> 읽는다(`AccountProfile`).
    *
    * **뱃지를 끈 그룹은 여기 없다** — `Permission.Groups` 권한자에게만 보인다(코어 39 확정 2).
    * 봇은 보통 그 권한이 없으므로, 뱃지가 꺼진 그룹으로 거르면 **아무도 걸리지 않는다.**
    */
   readonly groups?: readonly string[];
+}
+
+/**
+ * 한 사람의 프로필 — **계정을 감싼다**(코어의 `AccountProfileView`).
+ *
+ * <b>`groups`는 이 안의 `account`에 있다.</b> 펼쳐져 오지 않으므로 최상위에서 읽으면 늘
+ * `undefined`다 — 2026-09-23에 에코가 아무도 걸러 내지 못하고 조용히 놀던 까닭이 이것이었다.
+ */
+export interface AccountProfile {
+  readonly account: AccountRef;
+
+  /**
+   * **자동화 계정인가.** 프로필에만 실린다 — 글·알림에 실린 계정 한 칸에는 없다(코어가
+   * 목록에서 조인을 늘리지 않으려고 뺐다). 봇끼리 핑퐁을 막으려면 이 값이 든다.
+   */
+  readonly is_bot?: boolean;
+
+  /** 이사해 간 곳 — AP `movedTo`. */
+  readonly moved_to?: string | null;
 }
 
 /** 나가는 글의 공개 범위. **`public`은 코어에 없는 이름이다**(2026-09-08에 400으로 드러났다). */
@@ -111,8 +131,8 @@ export interface Sierra {
    */
   messages(since: string | undefined): Promise<readonly MessageEntry[]>;
 
-  /** 한 사람의 프로필 — **그룹을 아는 유일한 자리**다. */
-  account(id: string): Promise<AccountRef>;
+  /** 한 사람의 프로필 — **그룹과 `is_bot`을 아는 유일한 자리**다. */
+  account(id: string): Promise<AccountProfile>;
 
   /** 공개 글 하나. */
   publish(body: string, visibility: Visibility): Promise<void>;
@@ -218,8 +238,8 @@ export class SierraClient implements Sierra {
     return await this.send<readonly MessageEntry[]>('GET', `/api/v1/messages${query}`);
   }
 
-  async account(id: string): Promise<AccountRef> {
-    return await this.send<AccountRef>('GET', `/api/v1/accounts/${encodeURIComponent(id)}`);
+  async account(id: string): Promise<AccountProfile> {
+    return await this.send<AccountProfile>('GET', `/api/v1/accounts/${encodeURIComponent(id)}`);
   }
 
   async publish(body: string, visibility: Visibility): Promise<void> {
