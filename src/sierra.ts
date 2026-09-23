@@ -135,12 +135,19 @@ export interface Sierra {
   message(body: string, handle: string): Promise<void>;
 
   /**
-   * 참여한 메시지들 — **`since_id` 뒤의 것만**. 코어는 최신순으로 돌려준다.
+   * 참여한 메시지들 — 코어는 **최신순**으로 돌려준다.
    *
    * **알림이 아니라 메시지함을 본다.** `/notifications`에는 `since_id`가 없어 *새것만*을
-   * 물을 수 없다(`max_id`뿐이다) — 폴링이 커서로 도는 쪽을 고른다.
+   * 물을 수 없다(`max_id`뿐이다).
+   *
+   * - `since`(`since_id`) — 그 뒤의 새것만. **커서로 도는 봇**이 쓴다.
+   * - `before`(`max_id`) — 그 앞의 옛것. **과거로 넘기는** 봇이 쓴다.
+   * - `limit` — 한 판. 코어의 상한은 `list.limit_max`(기본 40)이고 넘기면 그 값으로 깎인다.
    */
-  messages(since: string | undefined): Promise<readonly MessageEntry[]>;
+  messages(
+    since: string | undefined,
+    page?: { readonly before?: string; readonly limit?: number },
+  ): Promise<readonly MessageEntry[]>;
 
   /** 한 사람의 프로필 — **그룹과 `is_bot`을 아는 유일한 자리**다. */
   account(id: string): Promise<AccountProfile>;
@@ -301,9 +308,24 @@ export class SierraClient implements Sierra {
     await this.send('POST', '/api/v1/posts', { body, recipients: [handle] });
   }
 
-  async messages(since: string | undefined): Promise<readonly MessageEntry[]> {
-    const query = since === undefined ? '' : `?since_id=${encodeURIComponent(since)}`;
-    return await this.send<readonly MessageEntry[]>('GET', `/api/v1/messages${query}`);
+  async messages(
+    since: string | undefined,
+    page?: { readonly before?: string; readonly limit?: number },
+  ): Promise<readonly MessageEntry[]> {
+    const query = new URLSearchParams();
+    if (since !== undefined) {
+      query.set('since_id', since);
+    }
+    if (page?.before !== undefined) {
+      query.set('max_id', page.before);
+    }
+    if (page?.limit !== undefined) {
+      query.set('limit', String(page.limit));
+    }
+
+    const tail = query.size === 0 ? '' : `?${query}`;
+
+    return await this.send<readonly MessageEntry[]>('GET', `/api/v1/messages${tail}`);
   }
 
   async account(id: string): Promise<AccountProfile> {
