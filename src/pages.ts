@@ -14,7 +14,8 @@ import { escapeHtml } from './text.js';
  * 가리킬 수 있고, **스크립트가 죽어도 선다**(모체 `CLAUDE.md`의 펼침메뉴 규칙과 같은 정신).
  *
  * ```
- * /                     내 봇들            — 고르는 자리
+ * /                     첫 화면            — 이 서비스가 무엇인가(README)
+ * /bots                 내 봇들            — 고르는 자리
  * /bots/new             봇 만들기          — 짓는 자리
  * /bots/{id}            **등록정보**       — 이름·소개·초상화·배경
  * /bots/{id}/features   **기능**           — 그 봇 고유의 것(포크의 칸)
@@ -22,6 +23,9 @@ import { escapeHtml } from './text.js';
  * /bots/{id}/advanced   **고급**           — 멈춤과 지우기
  * /bots/{id}/delete     지우기 전에 한 번  — 되돌릴 수 없는 것 앞의 한 걸음
  * ```
+ *
+ * **제목줄은 어느 장에서도 같은 모양이다**(2026-09-23 요구) — 왼쪽에 *여기가 어디인가*,
+ * 오른쪽에 *드나드는 단추* 하나. 화면마다 자리를 달리하면 사람이 매번 다시 찾는다.
  */
 
 /** 옷은 한 벌뿐이다 — 봇의 페이지라 하멜 스킨 밖이다. */
@@ -31,7 +35,7 @@ export function page(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <style>
-  body { max-width: 34rem; margin: 3rem auto; padding: 0 1rem;
+  body { max-width: 38rem; margin: 2rem auto; padding: 0 1rem;
          font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
   code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
   input, select { width: 100%; padding: .4rem; font: inherit; }
@@ -51,6 +55,12 @@ export function page(title: string, body: string): string {
   .grave { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
   /* **없애는 단추는 혼자 붉다** — 가로줄 아래의 다른 것들과도 무게가 다르다. */
   .danger, form button.danger { background: #fff; color: #a01b1b; border-color: #a01b1b; }
+  /* **제목줄은 어느 장에서도 같다** — 왼쪽에 여기가 어디인가, 오른쪽에 드나드는 단추. */
+  .top { display: flex; align-items: center; justify-content: space-between;
+         gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  .top h1 { margin: 0; font-size: 1.5rem; line-height: 1.3; }
+  .top form { margin: 0; }
+  .top .small-button, .top button { padding: .35rem .7rem; font-size: .9rem; }
   /* **주소가 탭이다** — 스크립트가 감추고 보이는 것이 아니라 네 장이 각자 선다. */
   .tabs { display: flex; flex-wrap: wrap; gap: .2rem; margin: 1rem 0 1.5rem;
           border-bottom: 1px solid #ddd; }
@@ -64,6 +74,20 @@ export function page(title: string, body: string): string {
   .bots a { font-weight: 600; }
   .bots small { margin-top: .3rem; }
   .idle { color: #a01b1b; }
+  /* 첫 화면의 문서 — README.md가 여기 선다. */
+  .doc { margin-top: 1.5rem; }
+  .doc h2 { font-size: 1.25rem; margin-top: 2rem; }
+  .doc h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .doc table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  .doc th, .doc td { border: 1px solid #ddd; padding: .35rem .6rem; text-align: left;
+                     vertical-align: top; }
+  .doc th { background: #f7f7f7; }
+  .doc pre { background: #f2f2f2; padding: .8rem 1rem; border-radius: .3rem; overflow-x: auto; }
+  .doc pre code { background: none; padding: 0; word-break: normal; }
+  .doc blockquote { margin: 1rem 0; padding: .2rem 0 .2rem 1rem; border-left: 3px solid #ddd;
+                    color: #444; }
+  /* **넓은 것은 자기 안에서 흐른다** — 본문이 옆으로 밀리지 않는다. */
+  .scroll { overflow-x: auto; }
   @media (prefers-color-scheme: dark) {
     body { color: #e8e8e8; background: #161616; }
     code { background: #2a2a2a; }
@@ -79,9 +103,29 @@ export function page(title: string, body: string): string {
     a.button.plain { background: #161616; color: #e8e8e8; }
     .danger, form button.danger { background: #161616; color: #e88; border-color: #e88; }
     .idle { color: #e88; }
+    .doc th, .doc td { border-color: #333; }
+    .doc th { background: #202020; }
+    .doc pre { background: #2a2a2a; }
+    .doc blockquote { border-left-color: #333; color: #b8b8b8; }
   }
-</style></head><body><h1>${title}</h1>${body}</body></html>`;
+</style></head><body>${body}</body></html>`;
 }
+
+/**
+ * **제목줄** — 왼쪽에 여기가 어디인가, 오른쪽에 드나드는 단추 하나.
+ *
+ * 목록도 봇 하나의 네 탭도 이 한 줄을 쓴다. 화면마다 자리를 달리하면 *나가기*를 찾는 눈이
+ * 매번 화면을 새로 읽는다.
+ */
+function top(title: string, right: string): string {
+  return `<header class="top"><h1>${title}</h1>${right}</header>`;
+}
+
+/** 나가는 단추 — 로그인한 사람의 제목줄 오른쪽은 늘 이것이다. */
+const LEAVE = '<form method="post" action="/auth/logout"><button type="submit">나가기</button></form>';
+
+/** 들어오는 단추 — 아직 누구인지 모르는 사람의 자리. */
+const ENTER = '<a class="button small-button" href="/auth/github">GitHub으로 들어가기</a>';
 
 /** 한 말은 한 번만 보인다 — 주소에 실려 와서 새로고침에는 남지 않는다. */
 function said(line: string | undefined): string {
@@ -97,20 +141,38 @@ export function statusOf(bot: BotRecord): string {
   return bot.stopped === true ? '멈춰 있다' : '돈다';
 }
 
-/** 들어오는 문 — 아직 누구인지 모르는 사람이 보는 한 장. */
-export function gatePage(): string {
-  return page('봇을 세운다', `
-    <p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>
-    <p><a class="button" href="/auth/github">GitHub으로 들어가기</a></p>`);
+/** 임자가 있으면 *아무개의 무엇*, 없으면 그냥 *무엇*. */
+function who(service: string, account?: AccountRecord): string {
+  return account === undefined
+    ? escapeHtml(service)
+    : `${escapeHtml(account.login)}의 ${escapeHtml(service)}`;
 }
 
 /**
- * **내 봇들** — 고르는 자리다.
+ * **첫 화면**(`/`) — 이 서비스가 무엇인가.
+ *
+ * 본문은 저장소의 `README.md`다(2026-09-23 요구). 무엇을 하는 서비스인지 적은 글이 이미
+ * 있는데 화면을 위해 다시 쓰면 **두 벌이 갈린다** — 한쪽만 고쳐지는 자리를 만들지 않는다.
+ *
+ * **로그인해도 이 자리는 이 자리다.** 바뀌는 것은 제목줄과, 목록으로 가는 단추 하나뿐이다 —
+ * 주소가 가리키는 것과 보이는 것이 같아야 하고, 들어온 사람도 소개를 다시 볼 수 있어야 한다.
+ */
+export function landingPage(service: string, readme: string, account?: AccountRecord): string {
+  return page(escapeHtml(service), `
+    ${top(who(service, account), account === undefined ? ENTER : LEAVE)}
+    ${account === undefined
+      ? '<p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>'
+      : '<p><a class="button" href="/bots">내 봇들</a></p>'}
+    ${readme === '' ? '' : `<div class="doc">${readme}</div>`}`);
+}
+
+/**
+ * **내 봇들**(`/bots`) — 고르는 자리다.
  *
  * 만들기 폼은 여기 없다(`/bots/new`). 목록은 *무엇이 있고 무엇이 도는가*만 말한다.
  */
 export function homePage(
-  account: AccountRecord, bots: readonly BotRecord[], max: number, line?: string,
+  service: string, account: AccountRecord, bots: readonly BotRecord[], max: number, line?: string,
 ): string {
   const rows = bots.length === 0
     ? '<p>아직 봇이 없습니다.</p>'
@@ -121,22 +183,22 @@ export function homePage(
         <small class="${isConnected(bot) ? '' : 'idle'}">${statusOf(bot)}</small>
       </li>`).join('')}</ul>`;
 
-  const room = bots.length < max;
-
-  return page(`${escapeHtml(account.login)}의 봇`, `
+  return page(who(service, account), `
+    ${top(who(service, account), LEAVE)}
     ${said(line)}
     ${rows}
-    <p>${room
+    <p>${bots.length < max
       ? '<a class="button" href="/bots/new">봇 만들기</a>'
-      : `봇은 ${max}개까지입니다.`}</p>
-    <hr>
-    <form method="post" action="/auth/logout"><button type="submit">나가기</button></form>`);
+      : `봇은 ${max}개까지입니다.`}</p>`);
 }
 
 /** **봇 만들기** — 짓는 자리 하나. */
-export function newBotPage(fields: { name?: string; summary?: string; origin?: string } = {},
-  wrong?: string): string {
+export function newBotPage(
+  service: string, account: AccountRecord,
+  fields: { name?: string; summary?: string; origin?: string } = {}, wrong?: string,
+): string {
   return page('봇 만들기', `
+    ${top('봇 만들기', LEAVE)}
     ${said(wrong)}
     <form method="post" action="/bots">
       <p><label>이름 <input name="name" required maxlength="60"
@@ -148,16 +210,18 @@ export function newBotPage(fields: { name?: string; summary?: string; origin?: s
         value="${escapeHtml(fields.origin ?? '')}"></label>
         <small>이은 뒤에는 바꿀 수 없습니다 — 자격 증명이 그 시에라의 것이기 때문입니다.</small></p>
       <p><button class="button" type="submit">만든다</button>
-         <a class="button plain" href="/">취소</a></p>
-    </form>`);
+         <a class="button plain" href="/bots">취소</a></p>
+    </form>
+    <p>${escapeHtml(account.login)}의 ${escapeHtml(service)}</p>`);
 }
 
 /** 한도에 닿았다 — 만들기 자리가 *왜 없는지* 말하는 한 장. */
 export function noRoomPage(max: number): string {
   return page('한도', `
+    ${top('한도', LEAVE)}
     <p>봇은 ${max}개까지입니다. 시에라 쪽 한도(<code>bot.max_per_user</code>)에 맞춘 수라,
        늘리려면 그 시에라의 관리자가 먼저 늘려야 합니다.</p>
-    <p><a class="button plain" href="/">돌아가기</a></p>`);
+    <p><a class="button plain" href="/bots">내 봇들</a></p>`);
 }
 
 /** 봇 하나의 화면 넷 — **주소가 탭이다**. */
@@ -171,10 +235,10 @@ const TABS: readonly (readonly [BotTab, string, string])[] = [
 ];
 
 /**
- * 네 장이 함께 쓰는 틀 — **머리와 탭 줄은 어느 탭에서도 같다**.
+ * 네 장이 함께 쓰는 틀 — **제목줄과 탭 줄은 어느 탭에서도 같다**.
  *
- * 머리가 *어느 봇의 무엇을 만지는 중인가*를 늘 지고 있어야 한다. 탭을 옮길 때마다 이름과
- * 상태가 자리를 바꾸면 사람이 매번 다시 읽는다.
+ * 제목줄의 모양은 봇 목록과 같다(2026-09-23 요구): 왼쪽에 *어느 봇인가*, 오른쪽에 나가는
+ * 단추. 탭을 옮길 때마다 그것들이 자리를 바꾸면 사람이 매번 다시 읽는다.
  */
 function shell(bot: BotRecord, current: BotTab, body: string, line?: string): string {
   const nav = TABS.map(([key, suffix, label]) =>
@@ -182,6 +246,7 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     .join('');
 
   return page(escapeHtml(bot.declaration.name), `
+    ${top(escapeHtml(bot.declaration.name), LEAVE)}
     <p>${statusOf(bot)}${bot.handle === undefined ? ''
       : ` · <code>@${escapeHtml(bot.handle)}</code>`} · ${escapeHtml(bot.origin)}</p>
     <nav class="tabs">${nav}</nav>
@@ -189,7 +254,7 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     ${isConnected(bot) || current === 'auth' ? '' : `
       <p class="said">아직 잇지 않았습니다 — <a href="/bots/${bot.id}/auth">인증</a>에서 잇습니다.</p>`}
     ${body}
-    <p><a href="/">내 봇들</a></p>`);
+    <p class="grave"><a class="button plain" href="/bots">내 봇들</a></p>`);
 }
 
 /**
@@ -320,6 +385,7 @@ export function advancedTab(bot: BotRecord, line?: string): string {
  */
 export function deletePage(bot: BotRecord): string {
   return page('지울까', `
+    ${top('지울까', LEAVE)}
     <p><b>${escapeHtml(bot.declaration.name)}</b>${bot.handle === undefined ? ''
       : ` (<code>@${escapeHtml(bot.handle)}</code>)`} — ${escapeHtml(bot.origin)}</p>
     <h2>여기서 사라지는 것</h2>
@@ -342,5 +408,8 @@ export function deletePage(bot: BotRecord): string {
 
 /** 막힌 자리 — 어디로 돌아갈지가 늘 함께 선다. */
 export function stopPage(title: string, body: string, back: string, word = '돌아가기'): string {
-  return page(title, `${body}<p><a class="button plain" href="${back}">${word}</a></p>`);
+  return page(title, `
+    ${top(title, LEAVE)}
+    ${body}
+    <p><a class="button plain" href="${back}">${word}</a></p>`);
 }

@@ -6,7 +6,7 @@ import type { Sealer } from './crypto.js';
 import { declarationChanged, manifestOf } from './manifest.js';
 import type { BotTab } from './pages.js';
 import {
-  advancedTab, authTab, deletePage, featuresTab, gatePage, homePage, newBotPage, noRoomPage,
+  advancedTab, authTab, deletePage, featuresTab, homePage, landingPage, newBotPage, noRoomPage,
   profileTab, stopPage,
 } from './pages.js';
 import { renderPanel, type BotPanel } from './panel.js';
@@ -30,7 +30,8 @@ import { Tickets } from './tickets.js';
  *
  * ```
  * GET  /healthz
- * GET  /                         내 봇들(로그인했으면) · 들어오는 문(아니면)
+ * GET  /                         **첫 화면** — 이 서비스가 무엇인가(`README.md`)
+ * GET  /bots                     **내 봇들** — 로그인한 사람의 자리
  * GET  /auth/github              GitHub으로 보낸다
  * GET  /auth/github/callback     돌아온다
  * POST /auth/logout
@@ -65,6 +66,10 @@ export interface WebOptions {
   readonly codeVersion: string;
   readonly maxBotsPerAccount: number;
   readonly scopes: readonly string[];
+  /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
+  readonly serviceName: string;
+  /** 첫 화면의 본문 — `README.md`를 그린 것. 없으면 빈 문자열이다. */
+  readonly readme: string;
   /** 포크가 봇 화면에 더하는 칸 — 없으면 템플릿의 것만 선다. */
   readonly panel?: BotPanel;
   readonly log: (line: string) => void;
@@ -131,8 +136,9 @@ async function handle(
     const account = await welcome(options.store, await exchange(options.github, code));
     const token = sessions.issue({ accountId: account.id });
 
+    // **들어오면 자기 봇들로 간다** — 소개는 방금 지나왔다.
     response.writeHead(302, {
-      location: '/',
+      location: '/bots',
       'set-cookie': `${COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=43200`,
     }).end();
     return;
@@ -151,21 +157,26 @@ async function handle(
   const session = sessions.peek(cookie(request) ?? '');
   const account = session === undefined ? undefined : await options.store.account(session.accountId);
 
-  if (account === undefined) {
-    if (path === '/') {
-      send(response, 200, gatePage());
-      return;
-    }
+  /*
+   * **첫 화면은 누구에게나 열린다** — 들어온 사람에게도 이 자리는 이 자리다(2026-09-23 요구).
+   * 바뀌는 것은 제목줄과, 목록으로 가는 단추 하나뿐이다.
+   */
+  if (path === '/' && request.method === 'GET') {
+    send(response, 200, landingPage(options.serviceName, options.readme, account));
+    return;
+  }
 
+  if (account === undefined) {
     redirect(response, '/');
     return;
   }
 
   const spoken = url.searchParams.get('said') ?? undefined;
 
-  if (path === '/' && request.method === 'GET') {
+  if (path === '/bots' && request.method === 'GET') {
     const bots = await options.store.botsOf(account.id);
-    send(response, 200, homePage(account, bots, options.maxBotsPerAccount, spoken));
+    send(response, 200,
+      homePage(options.serviceName, account, bots, options.maxBotsPerAccount, spoken));
     return;
   }
 
@@ -174,7 +185,7 @@ async function handle(
     const mine = await options.store.botsOf(account.id);
     send(response, 200, mine.length >= options.maxBotsPerAccount
       ? noRoomPage(options.maxBotsPerAccount)
-      : newBotPage());
+      : newBotPage(options.serviceName, account));
     return;
   }
 
@@ -190,7 +201,7 @@ async function handle(
   if (one !== null) {
     const bot = await ownBot(options, account, one[1] ?? '');
     if (bot === undefined) {
-      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/'));
+      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/bots', '내 봇들'));
       return;
     }
 
@@ -202,7 +213,7 @@ async function handle(
   if (extra !== null && request.method === 'POST') {
     const bot = await ownBot(options, account, extra[1] ?? '');
     if (bot === undefined || options.panel === undefined) {
-      send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/'));
+      send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/bots', '내 봇들'));
       return;
     }
 
@@ -228,7 +239,7 @@ async function handle(
   if (what !== null) {
     const bot = await ownBot(options, account, what[1] ?? '');
     if (bot === undefined) {
-      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/'));
+      send(response, 404, stopPage('없다', '<p>그런 봇이 없습니다.</p>', '/bots', '내 봇들'));
       return;
     }
 
@@ -236,7 +247,7 @@ async function handle(
     return;
   }
 
-  send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/'));
+  send(response, 404, stopPage('없다', '<p>그런 자리가 없습니다.</p>', '/bots', '내 봇들'));
 }
 
 /** 봇 하나에 하는 일들 — 주소의 끝 한 마디가 무엇을 할지 정한다. */
@@ -311,7 +322,8 @@ async function createBot(
 
   // **적은 것을 돌려준다** — 한 칸이 틀렸다고 셋을 다시 적게 하지 않는다.
   if (name === '' || summary === '' || origin === undefined) {
-    send(response, 400, newBotPage({ name, summary, origin: (form.get('origin') ?? '').trim() },
+    send(response, 400, newBotPage(options.serviceName, account,
+      { name, summary, origin: (form.get('origin') ?? '').trim() },
       '이름·소개·시에라 주소(https)가 있어야 합니다.'));
     return;
   }
@@ -424,7 +436,8 @@ async function deleteBot(
   options.log(`봇 ${bot.id}을(를) 지웠다 — ${bot.origin}${
     bot.handle === undefined ? '' : ` @${bot.handle}`}`);
 
-  redirect(response, `/?said=${encodeURIComponent(`${bot.declaration.name}을(를) 지웠습니다.`)}`);
+  redirect(response,
+    `/bots?said=${encodeURIComponent(`${bot.declaration.name}을(를) 지웠습니다.`)}`);
 }
 
 /** 탭 하나를 그린다 — **어느 장인지는 주소가 정하고, 머리와 탭 줄은 `pages.ts`가 진다.** */

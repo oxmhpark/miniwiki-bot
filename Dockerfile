@@ -27,7 +27,8 @@ ENV NODE_ENV=production
 
 COPY --from=build --chown=node:node /src/dist ./dist
 COPY --from=build --chown=node:node /src/node_modules ./node_modules
-COPY --chown=node:node package.json manifest.json ./
+# **첫 화면이 `README.md`를 그린다** — 소개를 화면용으로 다시 쓰면 두 벌이 갈린다.
+COPY --chown=node:node package.json manifest.json README.md ./
 
 # **상태가 사는 자리를 미리 만든다.** 도커는 이름 있는 볼륨을 만들 때 이미지의 그 자리에서
 # 소유권을 베끼므로, 없으면 `root`의 것이 되고 우리는 `node`로 돈다(에코드와 같다).

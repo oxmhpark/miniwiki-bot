@@ -30,6 +30,7 @@ npm run dev
 | `BOT_STATE` | | 상태 폴더 (`state`) |
 | `BOT_POLL_SECONDS` | | 봇 하나의 폴링 주기 (30) |
 | `BOT_MAX_PER_ACCOUNT` | | 계정당 봇 수 (3 — 코어의 `bot.max_per_user` 기본값) |
+| `BOT_SERVICE_NAME` | | 화면 제목줄에 설 이름. 비우면 루트 `manifest.json`의 `name` |
 | `BOT_DRY_RUN` | | `true`면 읽고 부르되 쓰지 않는다 |
 
 **GitHub OAuth 앱의 콜백**은 `{BOT_PUBLIC_ORIGIN}/auth/github/callback`이다.

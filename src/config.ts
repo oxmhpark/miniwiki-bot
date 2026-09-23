@@ -45,6 +45,15 @@ export interface BotServiceConfig {
 
   /** **읽고 부르되 쓰지 않는다** — 답이 어떻게 나올지 로그로 본다. */
   readonly dryRun: boolean;
+
+  /**
+   * 이 서비스의 이름 — 화면의 제목줄에 선다(*아무개의 __에코__*).
+   *
+   * **비워 두면 루트 `manifest.json`의 이름으로 떨어진다**(`startService`) — 포크가 이미
+   * 자기 것으로 바꾸는 파일이고 이미지에도 실린다. 한 저장소를 여러 자리에 세우면서 이름을
+   * 달리해야 할 때만 이 값을 준다.
+   */
+  readonly serviceName?: string;
 }
 
 const DEFAULTS = {
@@ -127,5 +136,8 @@ export function readConfig(env: NodeJS.ProcessEnv): BotServiceConfig {
     maxBotsPerAccount: count(
       env.BOT_MAX_PER_ACCOUNT, DEFAULTS.maxBotsPerAccount, 'BOT_MAX_PER_ACCOUNT'),
     dryRun: env.BOT_DRY_RUN === 'true',
+    ...(env.BOT_SERVICE_NAME === undefined || env.BOT_SERVICE_NAME.trim() === ''
+      ? {}
+      : { serviceName: env.BOT_SERVICE_NAME.trim() }),
   };
 }

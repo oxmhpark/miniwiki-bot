@@ -42,6 +42,8 @@ beforeEach(async () => {
     codeVersion: '0.1.0',
     maxBotsPerAccount: 2,
     scopes: ['read:posts'],
+    serviceName: '에코',
+    readme: '<h2>소개</h2><p>맡긴 메시지를 옮겨 적습니다.</p>',
     log: () => undefined,
   });
 
@@ -113,6 +115,8 @@ async function signIn(): Promise<Browser> {
 
   const back = await browser.get(`/auth/github/callback?state=${state}&code=c`);
   expect(back.status).toBe(302);
+  // **들어오면 자기 봇들로 간다** — 소개는 방금 지나왔다.
+  expect(back.headers.get('location')).toBe('/bots');
 
   return browser;
 }
@@ -131,11 +135,31 @@ async function makeBot(browser: Browser, name = '에코'): Promise<string> {
   return at.replace('/bots/', '').replace('/auth', '');
 }
 
+test('첫 화면은 누구에게나 열리고, 제목줄만 바뀐다', async () => {
+  const nobody = new Browser(origin);
+
+  const outside = await (await nobody.get('/')).text();
+  expect(outside).toContain('<h1>에코</h1>');
+  expect(outside).toContain('/auth/github');
+  expect(outside).toContain('맡긴 메시지를 옮겨 적습니다');
+  expect(outside).not.toContain('/auth/logout');
+
+  // 들어온 사람에게도 이 자리는 이 자리다 — 제목줄과 단추 하나만 바뀐다.
+  const browser = await signIn();
+  const inside = await (await browser.get('/')).text();
+  expect(inside).toContain('<h1>옥수박의 에코</h1>');
+  expect(inside).toContain('/auth/logout');
+  expect(inside).toContain('href="/bots"');
+  expect(inside).toContain('맡긴 메시지를 옮겨 적습니다');
+});
+
 test('목록과 만들기가 갈려 있다 — 목록에는 폼이 없다', async () => {
   const browser = await signIn();
 
-  const home = await browser.get('/');
+  const home = await browser.get('/bots');
   const listing = await home.text();
+  expect(listing).toContain('<h1>옥수박의 에코</h1>');
+  expect(listing).toContain('/auth/logout');
   expect(listing).toContain('아직 봇이 없습니다');
   expect(listing).toContain('/bots/new');
   expect(listing).not.toContain('action="/bots"');
@@ -149,7 +173,7 @@ test('한도에 닿으면 만들기 자리가 왜 없는지 말한다', async ()
   await makeBot(browser, '하나');
   await makeBot(browser, '둘');
 
-  const home = await (await browser.get('/')).text();
+  const home = await (await browser.get('/bots')).text();
   expect(home).not.toContain('/bots/new');
 
   // **주소를 직접 쳐도 막힌다** — 링크를 감추는 것은 문이 아니다.
@@ -286,7 +310,7 @@ test('지우기 전에 한 번 보이고, 지우면 사라진다', async () => {
 
   const gone = await browser.post(`/bots/${id}/delete`);
   expect(gone.status).toBe(302);
-  expect(gone.headers.get('location')).toContain('/?said=');
+  expect(gone.headers.get('location')).toContain('/bots?said=');
 
   expect(await store.bot(id)).toBeUndefined();
   expect(await (await browser.get(`/bots/${id}`)).text()).toContain('그런 봇이 없습니다');
@@ -314,6 +338,7 @@ test('로그인하지 않은 사람은 봇 자리에 못 든다 — 선언만 �
 
   const nobody = new Browser(origin);
   expect((await nobody.get(`/bots/${id}`)).status).toBe(302);
+  expect((await nobody.get('/bots')).status).toBe(302);
 
   const manifest = await (await nobody.get(`/bots/${id}/manifest.json`)).json() as {
     readonly version: string; readonly name: string;
