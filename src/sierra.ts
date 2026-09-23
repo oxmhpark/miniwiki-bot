@@ -167,6 +167,33 @@ export interface Sierra {
   ): Promise<{ readonly id: string }>;
 
   /**
+   * **에셋 풀에 올린다** — `sierradoc` 확장의 자리다(`POST /api/v1/assets`).
+   *
+   * 미디어로 직접 올리는 것과 갈리는 점:
+   *
+   * - **파일이 한 번만 저장된다.** 글에 붙일 때(`assetToMedia`) 바이트를 복사하지 않고
+   *   첨부 행이 에셋의 파일을 가리킨다 — 같은 것을 여러 글에 붙여도 저장은 하나다.
+   * - **사람이 관리한다.** 에셋 풀 화면이 태그로 목록을 그리므로 봇이 쌓은 것을 보고 지운다.
+   * - **에셋을 지우면 그것을 붙인 옛 글의 그림도 사라진다**(코어 44 확정 1·3).
+   *
+   * **`groups_read`는 정할 수 없다** — 올린 사람(봇)의 `groups`가 자동으로 찍히고 고치는
+   * 일은 관리자의 것이다(37 확정 4). 봇이 정하는 것은 이름과 태그뿐이다.
+   *
+   * **확장이 없는 시에라에서는 404다** — 부르는 쪽이 미디어 직접 올리기로 물러선다.
+   */
+  uploadAsset(
+    bytes: Uint8Array, mime: string, name: string, tag?: string,
+  ): Promise<{ readonly id: string }>;
+
+  /**
+   * 에셋을 **첨부로 바꾼다** — `POST /api/v1/assets/{id}/to-media`.
+   *
+   * 바이트를 열지 않는다. 읽을 수 있는 에셋만 붙고 못 읽으면 404다(존재가 새지 않는다).
+   * **붙고 나면 그 글을 보는 사람 모두가 그 파일을 본다.**
+   */
+  assetToMedia(assetId: string): Promise<{ readonly id: string }>;
+
+  /**
    * 마지막으로 낸 글의 시각 — **코어가 진실원이다**. 상태를 잃은 배포가 시계를 되찾는다.
    *
    * **스코프가 둘 든다**: 자기 아이디에 `read:accounts`, 자기 글 목록에 **`read:feeds`**
@@ -296,6 +323,34 @@ export class SierraClient implements Sierra {
       bytes: new Uint8Array(await response.arrayBuffer()),
       mime: response.headers.get('content-type') ?? 'application/octet-stream',
     };
+  }
+
+  async uploadAsset(
+    bytes: Uint8Array, mime: string, name: string, tag?: string,
+  ): Promise<{ readonly id: string }> {
+    const form = new FormData();
+    form.set('file', new Blob([bytes], { type: mime }), name);
+    form.set('name', name);
+    if (tag !== undefined && tag !== '') {
+      form.set('tag', tag);
+    }
+
+    const response = await fetch(`${this.config.origin}/api/v1/assets`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await this.accessToken()}` },
+      body: form,
+    });
+
+    if (!response.ok) {
+      throw new SierraError(response.status, await response.text());
+    }
+
+    return (await response.json()) as { readonly id: string };
+  }
+
+  async assetToMedia(assetId: string): Promise<{ readonly id: string }> {
+    return await this.send<{ readonly id: string }>(
+      'POST', `/api/v1/assets/${encodeURIComponent(assetId)}/to-media`);
   }
 
   async uploadMedia(
