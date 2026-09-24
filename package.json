@@ -1,6 +1,6 @@
 {
   "name": "miniwiki-bot",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "시에라에 붙는 멀티테넌트 봇 서비스의 라이브러리 — 봇은 이것을 포크하지 않고 의존한다",
   "type": "module",
   "main": "./dist/index.js",
