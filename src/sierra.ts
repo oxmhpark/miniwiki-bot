@@ -106,6 +106,16 @@ export interface ThreadItem {
   readonly in_reply_to?: string | null;
   readonly thread_root_id?: string;
   readonly recipients?: readonly AccountRef[];
+
+  /**
+   * 그 글에 붙은 것들 — **코어의 `PostView.Media`가 그대로 실려 온다**(2026-09-24에 타입만
+   * 뒤늦게 세웠다).
+   *
+   * `url`은 **상대 경로**이고 받으려면 인증이 든다(`fetchMedia` — 쓰레드 권한을 탄다).
+   * 숨김·삭제된 자리(placeholder)와 원격 항목에는 없다.
+   */
+  readonly media?: readonly MediaRef[];
+
   readonly hidden?: boolean;
   readonly deleted?: boolean;
   readonly created_at?: string;
