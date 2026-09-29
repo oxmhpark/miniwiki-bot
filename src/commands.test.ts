@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { declare, readCommand, unknownReply, type BotCommand } from './commands.js';
+import { declare, manual, readCommand, unknownReply, type BotCommand } from './commands.js';
 
 /*
  * 봇이 알아듣는 명령 — **`@아이디 /이름 인자`** (2026-09-29 요구).
@@ -14,7 +14,26 @@ const DRAIN: BotCommand = { name: 'drain', who: 'owner' };
 describe('명령 선언', () => {
   /** **내리는 자리는 하나다** — 선언·파싱·화면이 저마다 내리면 한 곳이 잊힌다. */
   it('이름을 내려서 받는다', () => {
-    expect(declare([{ name: '  SAY ', who: 'everyone' }])[0]?.name).toBe('say');
+    expect(declare([{ name: '  SAY ', who: 'everyone' }]).map((one) => one.name))
+      .toEqual(['help', 'say']);
+  });
+
+  /**
+   * **매뉴얼은 선언하지 않아도 선다** (2026-09-29 요구) — 봇마다 다른 이름이면 *무엇을 할
+   * 수 있나*를 묻기 전에 <b>묻는 법</b>을 먼저 알아야 한다.
+   */
+  it('적지 않아도 help가 맨 앞에 선다', () => {
+    expect(declare([])[0]).toEqual({
+      name: 'help', summary: '이 봇이 아는 명령을 보인다', who: 'everyone',
+    });
+  });
+
+  /** **봇이 제 것을 적었으면 그것을 쓴다** — 덮어쓰면 그 뜻이 조용히 사라진다. */
+  it('봇이 적은 help를 덮어쓰지 않는다', () => {
+    const built = declare([{ name: 'help', summary: '채토가 아는 것', who: 'everyone' }]);
+
+    expect(built).toHaveLength(1);
+    expect(built[0]?.summary).toBe('채토가 아는 것');
   });
 
   it.each(['', 'say hello', '말하기', 'say!', 'a'.repeat(33)])(
@@ -35,6 +54,12 @@ describe('명령 선언', () => {
   /** **내린 뒤에 견준다** — `Say`와 `say`는 같은 명령이다. */
   it('같은 이름이 둘이면 던진다', () => {
     expect(() => declare([SAY, { name: 'SAY', who: 'owner' }])).toThrow();
+  });
+
+  /** 저절로 선 `help`와도 부딪힌다 — 대소문자를 가리지 않으므로. */
+  it('저절로 선 help와 부딪혀도 던진다', () => {
+    expect(() => declare([{ name: 'HELP', who: 'everyone' }, { name: 'help', who: 'owner' }]))
+      .toThrow();
   });
 });
 
@@ -80,6 +105,17 @@ describe('명령 읽기', () => {
       .toEqual({ name: 'nope', args: '무엇', known: false });
   });
 
+  /**
+   * **`/?`는 `/help`다** (2026-09-29 요구) — 짧은 쪽이 손에 먼저 온다.
+   *
+   * **별칭이지 이름이 아니다.** 읽는 자리에서 한 번 갈아 주므로 선언에도 표에도 물음표가
+   * 서지 않는다.
+   */
+  it('물음표는 help로 읽힌다', () => {
+    expect(readCommand('@echo /?', declared))
+      .toEqual({ name: 'help', args: '', known: true });
+  });
+
   /** **한 글에 하나다** — 여럿을 받으면 차례와 실패의 뜻이 생긴다. */
   it('첫 번째 것만 읽는다', () => {
     expect(readCommand('/say 하나\n/drain', declared)?.name).toBe('say');
@@ -106,13 +142,53 @@ describe('모르는 명령에 답하기', () => {
     expect(unknown).toContain('모르는');
     expect(idle).toContain('아직');
 
-    // 둘 다 **지금 되는 것**을 함께 말한다 — 다시 물어보게 하지 않는다.
-    expect(unknown).toContain('/say');
-    expect(idle).toContain('/drain');
+    /*
+     * **목록을 쏟지 않는다** — 여기는 *그것이 아니다*를 말하는 자리이고, 무엇이 있는지는
+     * `/help`가 진다: 두 자리가 같은 목록을 지으면 한쪽만 고쳐진다.
+     */
+    expect(unknown).not.toContain('/say');
+    expect(unknown).toContain('/help');
+  });
+});
+
+describe('매뉴얼', () => {
+  const declared = declare([SAY, DRAIN]);
+
+  /**
+   * **재료가 이미 선언에 있다** — 봇이 글로 한 벌 더 적으면 둘이 갈린다: 명령을 더하고
+   * 매뉴얼을 잊는 일이 가장 흔한 어긋남이다.
+   */
+  it('선언에서 글을 짓는다', () => {
+    const said = manual(declared);
+
+    expect(said).toContain('/help');
+    expect(said).toContain('이 봇이 아는 명령을 보인다');
+
+    // **인자의 본보기가 함께 선다** — 무엇을 이어 쳐야 하는지가 거기 있다.
+    expect(said).toContain('/say <할 말>');
   });
 
-  it('명령을 받지 않는 봇은 그렇다고 말한다', () => {
-    expect(unknownReply({ name: 'nope', args: '', known: false }, []))
-      .toContain('명령을 받지 않습니다');
+  /** **임자의 것은 임자에게만 보인다** — 화면이 가리는 것과 같은 잣대다. */
+  it('임자가 아니면 임자의 명령이 서지 않는다', () => {
+    expect(manual(declared)).not.toContain('/drain');
+    expect(manual(declared, { owner: true })).toContain('/drain');
+  });
+
+  /** **표를 단다** — 목록만 있으면 *누구나 쓴다*로 읽힌다. */
+  it('임자만 쓰는 것에 표가 선다', () => {
+    expect(manual(declared, { owner: true })).toContain('(임자만)');
+  });
+
+  /** 앞말은 봇이 준다 — 제 이름을 대는 줄이다. */
+  it('앞말을 봇이 준다', () => {
+    expect(manual(declared, { lead: '채토의 명령:' }).split('\n')[0]).toBe('채토의 명령:');
+  });
+
+  /** **모르는 명령 응답은 목록을 쏟지 않는다** — 그 일은 `/help`가 진다. */
+  it('모르는 명령 응답은 help를 가리킨다', () => {
+    const said = unknownReply({ name: 'nope', args: '', known: false }, declared);
+
+    expect(said).toContain('/help');
+    expect(said).not.toContain('/say');
   });
 });

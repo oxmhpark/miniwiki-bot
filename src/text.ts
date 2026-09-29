@@ -49,3 +49,20 @@ export function escapeHtml(value: string): string {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * 알림이 가리키는 **글의 아이디** — `href`의 끝마디 (2026-09-29에 채토에서 올렸다).
+ *
+ * **알림에는 본문이 없다.** 어느 글이 나를 불렀는지만 오므로, 무엇이라 했는지는 그 글을
+ * 다시 물어야 안다(`context`) — 그 첫 걸음이 여기다.
+ *
+ * **봇마다 다시 쓰지 않는다.** 주소의 모양은 코어의 것이고, 봇이 저마다 정규식을 들면
+ * <b>코어가 그 모양을 바꿀 때 어느 봇이 멈추는지 셀 수 없다.</b>
+ */
+export function postIdOf(href: string | null | undefined): string | undefined {
+  if (href === null || href === undefined) {
+    return undefined;
+  }
+
+  return /\/([0-9a-fA-F-]{36})\/?$/.exec(href)?.[1];
+}

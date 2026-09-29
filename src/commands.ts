@@ -44,6 +44,24 @@ export interface CommandCall {
 }
 
 /**
+ * **모든 봇이 아는 명령** — 매뉴얼을 낸다 (2026-09-29 요구).
+ *
+ * **봇마다 다른 이름이면 그것을 또 외워야 한다.** 무엇을 할 수 있는지 묻는 일은 <b>봇을
+ * 처음 만난 사람의 첫 물음</b>이고, 그 자리에서 *이 봇은 무슨 낱말을 쓰지*를 다시 물어야
+ * 하면 자동완성이 있어도 소용이 없다 — 그래서 <b>선언하지 않아도 선다.</b>
+ */
+export const HELP = 'help';
+
+/**
+ * `/?`도 같은 것을 연다 — **짧은 쪽이 손에 먼저 온다**.
+ *
+ * **별칭이지 이름이 아니다.** 이름의 글자 집합에는 `?`가 없고(코어가 그 선언을 거절한다)
+ * 있어야 할 까닭도 없다 — <b>읽는 자리에서 한 번 갈아 주면</b> 선언도 표도 목록도 `help`
+ * 하나로 선다. 물음표를 이름으로 들이면 <i>주소·문장부호와 섞이는</i> 글자가 하나 는다.
+ */
+export const HELP_ALIAS = '?';
+
+/**
  * 이름이 규칙에 맞는가 — **코어가 받아들이는 것과 같은 글자 집합**.
  *
  * 빈칸이 들어가면 인자와 경계가 사라지고(인자는 줄 끝까지다), 유니코드를 열면 **눈으로 같아
@@ -63,7 +81,19 @@ const NAME = /^[a-z0-9_-]{1,32}$/;
 export function declare(commands: readonly BotCommand[]): readonly BotCommand[] {
   const seen = new Set<string>();
 
-  return commands.map((one) => {
+  /*
+   * **매뉴얼은 선언하지 않아도 선다**(2026-09-29 요구) — 봇마다 다른 이름이면 *무엇을 할
+   * 수 있나*를 묻기 전에 <b>묻는 법</b>을 먼저 알아야 한다.
+   *
+   * **봇이 제 것을 적었으면 그것을 쓴다** — 곁글을 달거나 범위를 좁히려는 봇이 있을 수 있고,
+   * 여기서 덮어쓰면 그 뜻이 조용히 사라진다.
+   */
+  const told = commands.some((one) => one.name.trim().toLowerCase() === HELP);
+  const all: readonly BotCommand[] = told
+    ? commands
+    : [{ name: HELP, summary: '이 봇이 아는 명령을 보인다', who: 'everyone' }, ...commands];
+
+  return all.map((one) => {
     const name = one.name.trim().toLowerCase();
 
     if (!NAME.test(name)) {
@@ -104,13 +134,16 @@ export function readCommand(
    * **줄머리이거나 빈칸 뒤의 `/`다** — 주소의 슬래시(`https://`)나 날짜(`9/29`)에서 열리면
    * 평범한 글이 명령으로 읽힌다. 화면의 자동완성도 같은 자리에서 연다.
    */
-  const found = /(?:^|\s)\/([A-Za-z0-9_-]{1,32})(?:[ \t]+(.*))?$/m.exec(body);
+  const found = /(?:^|\s)\/([A-Za-z0-9_?-]{1,32})(?:[ \t]+(.*))?$/m.exec(body);
 
   if (found === null) {
     return undefined;
   }
 
-  const name = (found[1] ?? '').toLowerCase();
+  const typed = (found[1] ?? '').toLowerCase();
+
+  // **`?`는 여기서 한 번 갈린다** — 그 뒤로는 어디에도 물음표가 없다(선언에도 표에도).
+  const name = typed === HELP_ALIAS ? HELP : typed;
 
   return {
     name,
@@ -132,13 +165,47 @@ export function unknownReply(
   call: CommandCall,
   declared: readonly BotCommand[],
 ): string {
-  if (declared.length === 0) {
-    return `저는 명령을 받지 않습니다. 그냥 말을 걸어 주세요.`;
+  /*
+   * **긴 목록을 여기 쏟지 않는다.** 여기는 <i>그것이 아니다</i>를 말하는 자리이고, 무엇이
+   * 있는지는 `/help`가 지는 일이다 — 두 자리가 같은 목록을 지으면 한쪽만 고쳐진다.
+   */
+  return call.known
+    ? `\`/${call.name}\`은(는) 아직 서지 않은 명령입니다. \`/${HELP}\`로 목록을 봅니다.`
+    : `\`/${call.name}\`은(는) 제가 모르는 명령입니다. \`/${HELP}\`로 목록을 봅니다.`;
+}
+
+/**
+ * **매뉴얼** — `/help`(또는 `/?`)가 내는 글 (2026-09-29 요구).
+ *
+ * **여기서 짓는 까닭은 재료가 이미 여기 있기 때문이다.** 이름·곁글·인자·범위가 선언에 모두
+ * 있으므로 봇이 그것을 <b>글로 한 벌 더 적으면</b> 둘이 갈린다 — 명령을 더하고 매뉴얼을
+ * 잊는 일이 가장 흔한 어긋남이다(채토의 옛 `HELP` 상수가 그 모양이었다).
+ *
+ * **임자의 것은 임자에게만 보인다** — 화면이 가리는 것과 같은 잣대다. 다만 여기도
+ * <b>친절이지 문이 아니다</b>: 거절은 명령을 받는 자리가 한다.
+ *
+ * **앞말은 봇이 준다**(<c>lead</c>) — *채토의 명령:* 처럼 제 이름을 대는 줄이고, 없으면
+ * 담백한 한 줄이 선다.
+ */
+export function manual(
+  declared: readonly BotCommand[],
+  options: { readonly owner?: boolean; readonly lead?: string } = {},
+): string {
+  const shown = declared.filter((one) => one.who !== 'owner' || options.owner === true);
+
+  if (shown.length === 0) {
+    return '이 봇은 명령을 받지 않습니다. 그냥 말을 걸어 주세요.';
   }
 
-  const names = declared.map((one) => `/${one.name}`).join(' · ');
+  const lines = shown.map((one) => {
+    const call = one.args === undefined || one.args === '' ? `/${one.name}` : `/${one.name} ${one.args}`;
+    const said = one.summary === undefined || one.summary === '' ? '' : ` — ${one.summary}`;
 
-  return call.known
-    ? `${'/'}${call.name}은(는) 아직 서지 않은 명령입니다. 지금 되는 것: ${names}`
-    : `${'/'}${call.name}은(는) 제가 모르는 명령입니다. 지금 되는 것: ${names}`;
+    // **임자만 쓰는 것에는 표를 단다** — 목록만 있으면 *누구나 쓴다*로 읽힌다.
+    const mark = one.who === 'owner' ? ' (임자만)' : '';
+
+    return `- \`${call}\`${said}${mark}`;
+  });
+
+  return [options.lead ?? '제가 아는 명령:', ...lines].join('\n');
 }
