@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import type { BotCommand } from './commands.js';
 import { readConfig } from './config.js';
 import { Sealer } from './crypto.js';
 import type { BotIntake, ConnectTicket } from './intake.js';
@@ -35,6 +36,17 @@ export interface ServiceOptions {
   readonly codeVersion: string;
   /** 이 봇이 청하는 권한. 기본은 *멘션에 답하는 봇*의 넷이다. */
   readonly scopes?: readonly string[];
+
+  /**
+   * 이 봇이 알아듣는 **명령**(`@아이디 /이름 인자` · 2026-09-29 요구).
+   *
+   * **선언과 파싱이 여기 한 자리에서 나온다** — 적어 두면 `manifest.json`에 실려 코어의
+   * 표로 가고(화면이 그것으로 제안한다), 들어온 글은 `readCommand`가 같은 목록으로 읽는다.
+   *
+   * **주지 않으면 명령이 없는 봇이다** — 선언의 그 칸이 빠지므로 코어에 담긴 것도 건드리지
+   * 않는다. 명령을 들이지 않기로 한 봇이 남의 판에서 담긴 것을 지우면 안 된다.
+   */
+  readonly commands?: readonly BotCommand[];
 
   /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
   readonly panel?: BotPanel;
@@ -141,6 +153,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     codeVersion: options.codeVersion,
     maxBotsPerAccount: config.maxBotsPerAccount,
     scopes: options.scopes ?? DEFAULT_SCOPES,
+    ...(options.commands === undefined ? {} : { commands: options.commands }),
     serviceName: name,
     about: about === undefined ? '' : renderMarkdown(withoutTitle(about)),
     ...(options.panel === undefined ? {} : { panel: options.panel }),

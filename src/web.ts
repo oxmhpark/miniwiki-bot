@@ -5,6 +5,7 @@ import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
 import type { BotIntake, ConnectTicket } from './intake.js';
 import { renderIntake } from './intake.js';
+import type { BotCommand } from './commands.js';
 import { declarationChanged, manifestOf } from './manifest.js';
 import type { BotTab } from './pages.js';
 import {
@@ -70,6 +71,10 @@ export interface WebOptions {
   readonly codeVersion: string;
   readonly maxBotsPerAccount: number;
   readonly scopes: readonly string[];
+
+  /** 이 봇이 알아듣는 명령 — 선언에 실린다. 없으면 그 칸이 빠진다(2026-09-29 요구). */
+  readonly commands?: readonly BotCommand[];
+
   /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
   readonly serviceName: string;
   /** 첫 화면의 본문 — 그 봇의 `ABOUT.md`를 그린 것. 없으면 빈 문자열이다. */
@@ -120,7 +125,8 @@ async function handle(
       return;
     }
 
-    const body = JSON.stringify(manifestOf(bot, options.codeVersion, options.scopes), null, 2);
+    const body = JSON.stringify(
+      manifestOf(bot, options.codeVersion, options.scopes, options.commands), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);
     return;
   }

@@ -1,3 +1,5 @@
+import type { BotCommand } from './commands.js';
+import { declare } from './commands.js';
 import type { BotDeclaration, BotRecord } from './state.js';
 
 /**
@@ -23,6 +25,15 @@ export interface ManifestView {
   readonly avatar?: string;
   readonly header?: string;
   readonly scopes: readonly string[];
+
+  /**
+   * 이 봇이 알아듣는 명령 — **없으면 칸째로 빠진다**(2026-09-29 요구).
+   *
+   * **안 적은 것과 없다고 적은 것은 다르다.** 코어는 칸이 없으면 담긴 것을 건드리지 않고,
+   * `[]`를 받으면 지운다 — 명령을 들이지 않는 봇이 <b>남의 판에서 담긴 것을 지우는</b>
+   * 일이 없어야 한다.
+   */
+  readonly commands?: readonly BotCommand[];
 }
 
 /**
@@ -40,6 +51,7 @@ export function manifestOf(
   bot: BotRecord,
   codeVersion: string,
   scopes: readonly string[] = DEFAULT_SCOPES,
+  commands?: readonly BotCommand[],
 ): ManifestView {
   return {
     version: version(codeVersion, bot.settingsVersion),
@@ -48,6 +60,13 @@ export function manifestOf(
     ...(bot.declaration.avatar === undefined ? {} : { avatar: bot.declaration.avatar }),
     ...(bot.declaration.header === undefined ? {} : { header: bot.declaration.header }),
     scopes: [...scopes],
+
+    /*
+     * **내려서 싣는다**(`declare`) — 코어도 내려서 담지만, 여기서 내리면 <b>어긋난 선언이
+     * 봇 서버에서 먼저 걸린다</b>: 코어의 거절은 사람이 설치를 눌러야 보이고 그때는 이미
+     * 늦다.
+     */
+    ...(commands === undefined ? {} : { commands: declare(commands) }),
   };
 }
 
