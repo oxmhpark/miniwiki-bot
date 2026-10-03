@@ -111,3 +111,7 @@ if (call === undefined) {
 
 **판을 올리는 법**(태그를 가리킨다)과 봇 일반의 설계는
 [`.claude/BOT.md`](./.claude/BOT.md)의 *봇을 짓는 법*에 있다.
+
+## 운영으로 세우기
+
+[`DEPLOY.md`](./DEPLOY.md) — 봇 서비스 하나를 한 기계에 세우고, 올리고, 지키는 차례. 봇마다 더하는 것은 그 봇의 `DEPLOY.md`.
