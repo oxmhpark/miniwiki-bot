@@ -87,14 +87,49 @@ docker compose --env-file .env up -d --no-build --force-recreate
 **`--force-recreate`를 빼지 않는다** — 빼면 컴포즈가 이미지가 바뀐 것을 알아보지 못하고 옛
 이미지로 그대로 서는 일이 있었다. 올린 뒤 위의 라벨로 확인한다.
 
-## 지키는 것
+## 지키는 것 — 백업
 
-**상태는 볼륨 하나다**(`/app/state`) — 계정·봇·봉한 자격 증명·커서·사람이 맡긴 것. 백업은 볼륨과
-`.env`(열쇠) **둘을 함께** 둔다. 하나만 있으면 읽을 수 없다.
+**상태는 볼륨이다**(`/app/state`) — 계정·봇·봉한 자격 증명·커서·사람이 맡긴 것. 저장소에 든
+`backup.sh`·`restore.sh`가 그것을 뜨고 되돌린다(템플릿에서 온 사본, 모든 봇이 같다).
+
+- **볼륨 이름을 적지 않는다.** `.env`의 `COMPOSE_PROJECT_NAME`을 읽고 컴포즈가 단 라벨
+  (`com.docker.compose.project`)로 그 프로젝트의 볼륨을 전부 찾는다 — 인스턴스가 늘어도 스크립트를
+  고치지 않는다.
+- **봉인 열쇠는 묶음에 없다.** `.env`를 따로 둔다(아래 *봉인 열쇠*).
 
 ```sh
-docker run --rm -v <이름>_bot-state:/s -v "$PWD":/b alpine tar czf /b/bot-state.tgz -C /s .
+./backup.sh --out /srv/backup/<이름>                       # 한 벌 (최근 7벌 보존, --keep)
+./restore.sh --from /srv/backup/<이름>/20261004T040000Z    # 묻고 되돌린다 (--yes면 묻지 않는다)
 ```
 
-**볼륨을 지우면**(`down -v` · `volume rm`) 모든 봇과 맡긴 것이 사라진다 — 임자가 봇을 처음부터
-다시 잇고 사람마다 다시 맡긴다. 지우기 전에 열어 본다.
+**매일 돌리기** — 리눅스는 cron:
+
+```
+0 4 * * * /path/to/<봇 저장소>/backup.sh --out /srv/backup/<이름> --quiet
+```
+
+맥은 launchd다(cron은 디스크 접근 권한에 막히기 쉽다). `~/Library/LaunchAgents/<라벨>.plist`에
+두고 `launchctl load`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>net.codemach.<이름>.backup</string>
+  <key>ProgramArguments</key><array>
+    <string>/path/to/<봇 저장소>/backup.sh</string>
+    <string>--out</string><string>/srv/backup/<이름></string>
+    <string>--quiet</string>
+  </array>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>10</integer></dict>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>StandardErrorPath</key><string>/srv/backup/<이름>/launchd.err</string>
+</dict></plist>
+```
+
+**되돌리기의 조건** — 볼륨이 이미 있어야 한다(서비스를 한 번 올린 뒤). 다른 프로젝트의 묶음은
+받지 않는다. **커서도 그때로 돌아가** 그 뒤의 일을 다시 한다 — 무엇이 다시 일어나는지는 봇마다
+`DEPLOY.md`가 적는다.
+
+**볼륨을 지우면**(`down -v` · `volume rm`) 모든 봇과 맡긴 것이 사라진다 — 지우기 전에 연다.
+
