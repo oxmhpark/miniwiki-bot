@@ -32,7 +32,7 @@ export interface BotContext {
    * 부를 때마다 새 티켓이 난다(15분). 링크에 실린 것은 *어느 봇의 누구인가*이고, 그것이
    * 곧 그 사람의 신원이다 — **말 거는 사람은 이 서비스의 계정을 만들지 않는다.**
    *
-   * 포크가 `intake`를 주지 않았으면 링크를 내도 그 자리는 404다 — 부르기 전에 자기 봇이
+   * 봇이 `intake`를 주지 않았으면 링크를 내도 그 자리는 404다 — 부르기 전에 자기 봇이
    * 무엇을 청하는지 알고 있어야 한다.
    */
   readonly connectLink: (who: IntakeWho) => string;
@@ -42,9 +42,9 @@ export interface BotContext {
 }
 
 /**
- * **포크한 봇이 짓는 것은 이것 하나다.**
+ * **봇이 짓는 것은 이것 하나다.**
  *
- * 템플릿이 지는 것 — 계정·봇·자격 증명·시에라 왕복·선언·폴링·상태·봉인·웹. 봇이 지는 것 —
+ * 라이브러리가 지는 것 — 계정·봇·자격 증명·시에라 왕복·선언·폴링·상태·봉인·웹. 봇이 지는 것 —
  * *한 바퀴에 무엇을 하는가*.
  */
 export interface BotBrain {
@@ -161,7 +161,7 @@ export interface FleetOptions {
   readonly dryRun: boolean;
   readonly pollMs: number;
   readonly log: (line: string) => void;
-  /** 봇 하나의 머리를 짓는다 — **포크한 봇이 여기에 자기 것을 준다**. */
+  /** 봇 하나의 머리를 짓는다 — **봇이 여기에 자기 것을 준다**. */
   readonly brain: (bot: BotRecord) => BotBrain;
 
   /**
@@ -214,7 +214,7 @@ export class Fleet {
   }
 
   /**
-   * 그 봇의 손 — **화면이 포크의 칸을 그릴 때도 이것이 든다**(`BotPanel`).
+   * 그 봇의 손 — **화면이 봇의 칸을 그릴 때도 이것이 든다**(`BotPanel`).
    *
    * 봉인을 푸는 유일한 자리다. 아직 잇지 않은 봇이면 클라이언트 비밀이 없어 시에라 호출이
    * 그대로 실패한다 — 부르는 쪽이 `isConnected`를 먼저 본다.
@@ -226,11 +226,11 @@ export class Fleet {
 
     return {
       bot,
-      sierra: new SierraClient({
-        origin: bot.origin,
-        clientId: bot.clientId ?? '',
-        clientSecret,
-      }),
+      sierra: new SierraClient(
+        { origin: bot.origin, clientId: bot.clientId ?? '', clientSecret },
+        undefined,
+        this.options.log,
+      ),
       store: this.options.store,
       sealer: this.options.sealer,
       publicOrigin: this.options.publicOrigin,

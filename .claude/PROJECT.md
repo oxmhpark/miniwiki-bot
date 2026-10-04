@@ -28,14 +28,14 @@
 ## 이 저장소가 하는 일
 
 **의존되는 것.** 여기서 짓는 것은 *어느 봇에도 속하지 않는 것*이고, 봇은 이것을 **git 태그
-의존**으로 쓴다 — `github:oxmhpark/miniwiki-bot#v0.3.0`(`BOT.md`의 *봇을 짓는 법*).
+의존**으로 쓴다 — `github:oxmhpark/miniwiki-bot#v0.6.0`(`BOT.md`의 *봇을 짓는 법*).
 
 | 무엇 | 어디 |
 |---|---|
 | **공개 API** | `src/index.ts` — 봇이 가져다 쓰는 것은 여기 적힌 것뿐이다 |
 | 내보내지 않는 것 | `web.ts` · `pages.ts` · `auth.ts` · `markdown.ts` — 화면과 문은 이 라이브러리가 통째로 진다 |
-| **새 봇의 견본** | `template/` — `Dockerfile` · `docker-compose*.yml` · `Procfile` · `manifest.json` · `main.ts`. 새 봇이 통째로 베낀다 |
-| 검사 | `web.test.ts`(화면 전 구간) · `markdown.test.ts`. **봇의 검사는 봇 저장소에 있다** |
+| **새 봇의 견본** | `template/` — `Dockerfile` · `docker-compose*.yml` · `manifest.json` · `main.ts`. 새 봇이 통째로 베낀다 |
+| 검사 | `web.test.ts`(화면 전 구간) · `markdown.test.ts`. **봇의 검사는 봇 저장소에 있다** — 거기서 쓰는 가짜 시에라는 `src/testing.ts`(`miniwiki-bot/testing`)가 낸다 |
 
 ## 판을 내는 법
 

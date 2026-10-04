@@ -49,8 +49,8 @@ export interface BotServiceConfig {
   /**
    * 이 서비스의 이름 — 화면의 제목줄에 선다(*아무개의 __에코__*).
    *
-   * **비워 두면 루트 `manifest.json`의 이름으로 떨어진다**(`startService`) — 포크가 이미
-   * 자기 것으로 바꾸는 파일이고 이미지에도 실린다. 한 저장소를 여러 자리에 세우면서 이름을
+   * **비워 두면 루트 `manifest.json`의 이름으로 떨어진다**(`startService`) — 봇 저장소가
+   * 자기 것으로 두는 파일이고 이미지에도 실린다. 한 저장소를 여러 자리에 세우면서 이름을
    * 달리해야 할 때만 이 값을 준다.
    */
   readonly serviceName?: string;
@@ -65,44 +65,37 @@ const DEFAULTS = {
 
 export class ConfigError extends Error {}
 
-/** 숫자 하나 — 초 단위로 받아 ms로 낸다. */
-export function seconds(raw: string | undefined, fallback: number, name: string): number {
+/**
+ * 양의 정수 하나 — 비어 있으면 `undefined`(부르는 쪽이 기본값을 댄다). `what`은 오류
+ * 문장에 서는 *무엇이어야 하는가*다.
+ */
+function positiveInt(
+  raw: string | undefined, name: string, what: string, max = Number.POSITIVE_INFINITY,
+): number | undefined {
   if (raw === undefined || raw.trim() === '') {
-    return fallback;
+    return undefined;
   }
 
   const parsed = Number.parseInt(raw, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    throw new ConfigError(`${name}: 양의 정수(초)여야 합니다 — 받은 값 '${raw}'`);
+  if (Number.isNaN(parsed) || parsed <= 0 || parsed > max) {
+    throw new ConfigError(`${name}: ${what}여야 합니다 — 받은 값 '${raw}'`);
   }
 
-  return parsed * 1000;
+  return parsed;
+}
+
+/** 숫자 하나 — 초 단위로 받아 ms로 낸다. `fallback`은 이미 ms다. */
+export function seconds(raw: string | undefined, fallback: number, name: string): number {
+  const parsed = positiveInt(raw, name, '양의 정수(초)');
+  return parsed === undefined ? fallback : parsed * 1000;
 }
 
 function count(raw: string | undefined, fallback: number, name: string): number {
-  if (raw === undefined || raw.trim() === '') {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    throw new ConfigError(`${name}: 양의 정수여야 합니다 — 받은 값 '${raw}'`);
-  }
-
-  return parsed;
+  return positiveInt(raw, name, '양의 정수') ?? fallback;
 }
 
 function port(raw: string | undefined, fallback: number, name: string): number {
-  if (raw === undefined || raw.trim() === '') {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  if (Number.isNaN(parsed) || parsed <= 0 || parsed > 65535) {
-    throw new ConfigError(`${name}: 포트 번호여야 합니다 — 받은 값 '${raw}'`);
-  }
-
-  return parsed;
+  return positiveInt(raw, name, '포트 번호', 65535) ?? fallback;
 }
 
 export function required(env: NodeJS.ProcessEnv, name: string): string {

@@ -14,10 +14,10 @@ import { Tickets } from './tickets.js';
 import { createWebServer } from './web.js';
 
 /**
- * 서비스를 세운다 — **포크한 봇이 부르는 자리**.
+ * 서비스를 세운다 — **봇이 부르는 자리**.
  *
- * 템플릿이 지는 것: 설정·상태·봉인·계정·봇·선언·시에라·폴링·화면.
- * 포크가 주는 것: `brain` — *한 바퀴에 무엇을 하는가* 하나.
+ * 라이브러리가 지는 것: 설정·상태·봉인·계정·봇·선언·시에라·폴링·화면.
+ * 봇이 주는 것: `brain` — *한 바퀴에 무엇을 하는가* 하나.
  */
 
 export interface ServiceOptions {
@@ -84,9 +84,9 @@ async function beside(root: URL, name: string): Promise<string | undefined> {
 /**
  * 화면의 제목줄에 설 이름 — **환경이 먼저, 그다음이 선언의 틀**.
  *
- * 루트 `manifest.json`은 *새 봇의 틀*이고 **포크가 이미 자기 것으로 바꾸는 파일**이라(에코의
- * `에코`) 여기 적힌 이름이 곧 그 서비스의 이름이다. 한 저장소를 여러 자리에 세우면서 이름을
- * 달리해야 할 때만 `BOT_SERVICE_NAME`을 준다.
+ * 루트 `manifest.json`은 **봇 저장소가 자기 것으로 두는 파일**이라(에코의 `에코`) 여기 적힌
+ * 이름이 곧 그 서비스의 이름이다 — 읽는 것은 `name`뿐이다. 한 저장소를 여러 자리에 세우면서
+ * 이름을 달리해야 할 때만 `BOT_SERVICE_NAME`을 준다.
  */
 async function serviceName(root: URL, given: string | undefined): Promise<string> {
   if (given !== undefined) {
@@ -108,7 +108,7 @@ async function serviceName(root: URL, given: string | undefined): Promise<string
 export async function startService(options: ServiceOptions): Promise<void> {
   const config = readConfig(process.env);
   const store = new FileStore(config.stateDir);
-  const sealer = new Sealer(config.secret);
+  const sealer = new Sealer(config.secret, 'bot/v1');
 
   /*
    * **연결 링크의 표는 하나다** — 봇이 내고 화면이 받는다.
@@ -133,9 +133,9 @@ export async function startService(options: ServiceOptions): Promise<void> {
    * **첫 화면의 본문은 `ABOUT.md`다**(2026-09-23 요구). 한 번 읽어 그려 두고 다시 읽지
    * 않는다 — 이미지 안에서 바뀌지 않는 파일이다.
    *
-   * **`README.md`가 아니다.** 그 파일은 저장소를 여는 개발자의 것이고 템플릿에도 있어야
-   * 하는데, 첫 화면까지 그것으로 지면 **포크가 merge할 때마다 부딪힌다** — `BOT.md`와
-   * `PROJECT.md`를 가른 것과 같은 까닭이다. 없으면 첫 화면은 제목과 단추만 선다.
+   * **`README.md`가 아니다.** 그 파일은 저장소를 여는 개발자의 것이고 라이브러리에도 있어야
+   * 한다 — 독자가 다른 글이다(`BOT.md`와 `PROJECT.md`를 가른 것과 같은 까닭). 없으면 첫
+   * 화면은 제목과 단추만 선다.
    */
   const about = await beside(options.root, 'ABOUT.md');
   const name = await serviceName(options.root, config.serviceName);

@@ -10,7 +10,7 @@ import type { BotDeclaration, BotRecord } from './state.js';
  * 한다 — 그래서 `/bots/{botId}/manifest.json`이고, 저장소 루트의 것은 **새 봇의 틀**이다.
  */
 
-/** 이 봇이 청하는 권한 — **포크한 봇이 자기 것으로 바꾼다**. */
+/** 이 봇이 청하는 권한의 기본 — **봇이 `scopes`로 자기 것을 준다**. */
 export const DEFAULT_SCOPES = [
   'read:notifications',
   'read:posts',

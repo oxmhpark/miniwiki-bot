@@ -24,7 +24,7 @@ const GITHUB = { id: 4242, login: '옥수박' };
 /** 말 거는 사람 — **시에라의 id는 GUID다**(`state.ts`가 모양을 본다). */
 const TALKER = '01a0b7c8-ce1c-7655-8154-874313000001';
 
-/** 가짜 포크 — **무언가를 청하는 봇**의 자리. 한 칸을 받아 봉해 둔다. */
+/** 가짜 봇 — **무언가를 청하는 봇**의 자리. 한 칸을 받아 봉해 둔다. */
 const intake: BotIntake = {
   describe: async (who) => ({
     title: '열쇠 맡기기',
@@ -56,7 +56,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'bot-web-'));
   store = new FileStore(dir);
 
-  const sealer = new Sealer('0123456789abcdef0123');
+  const sealer = new Sealer('0123456789abcdef0123', 'bot/v1');
   tickets = new Tickets<ConnectTicket>();
   const fleet = new Fleet({
     store, sealer, publicOrigin: 'https://bots.example', dryRun: true, pollMs: 1000,

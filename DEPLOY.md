@@ -90,7 +90,7 @@ docker compose --env-file .env up -d --no-build --force-recreate
 ## 지키는 것 — 백업
 
 **상태는 볼륨이다**(`/app/state`) — 계정·봇·봉한 자격 증명·커서·사람이 맡긴 것. 저장소에 든
-`backup.sh`·`restore.sh`가 그것을 뜨고 되돌린다(템플릿에서 온 사본, 모든 봇이 같다).
+`backup.sh`·`restore.sh`가 그것을 뜨고 되돌린다(라이브러리 `template/`에서 온 사본, 모든 봇이 같다).
 
 - **볼륨 이름을 적지 않는다.** `.env`의 `COMPOSE_PROJECT_NAME`을 읽고 컴포즈가 단 라벨
   (`com.docker.compose.project`)로 그 프로젝트의 볼륨을 전부 찾는다 — 인스턴스가 늘어도 스크립트를

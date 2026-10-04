@@ -274,6 +274,7 @@ export class SierraClient implements Sierra {
   constructor(
     private readonly config: SierraCredentials,
     private readonly now: () => number = () => Date.now(),
+    private readonly log: (line: string) => void = (line) => console.warn(line),
   ) {}
 
   async me(): Promise<AccountRef> {
@@ -437,7 +438,9 @@ export class SierraClient implements Sierra {
 
       const at = Date.parse(newest);
       return Number.isNaN(at) ? undefined : at;
-    } catch {
+    } catch (error) {
+      // **없는 것으로 친다** — 다만 조용히는 아니다. 스코프(`read:feeds`)가 빠진 것이 여기서 드러난다.
+      this.log(`마지막 글을 묻지 못했다 — ${(error as Error).message}`);
       return undefined;
     }
   }

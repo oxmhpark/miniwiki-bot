@@ -41,7 +41,7 @@ import { Tickets } from './tickets.js';
  * GET  /bots/new                 봇 만들기 폼
  * POST /bots                     봇을 만든다
  * GET  /bots/{id}                **등록정보** — 이름·소개·초상화·배경
- * GET  /bots/{id}/features       **기능** — 그 봇 고유의 것(포크의 칸)
+ * GET  /bots/{id}/features       **기능** — 그 봇 고유의 것(봇의 칸)
  * GET  /bots/{id}/auth           **인증** — 선언 주소와 자격 증명
  * GET  /bots/{id}/advanced       **고급** — 멈춤과 지우기
  * POST /bots/{id}/credentials    시에라에서 받은 client_id·secret을 붙인다
@@ -52,7 +52,7 @@ import { Tickets } from './tickets.js';
  * GET  /bots/{id}/manifest.json  **공개** — 코어가 읽는다
  * GET  /connect/{티켓}            **말 거는 사람의 자리** — 봇에게 무언가를 맡긴다
  * POST /connect/{티켓}            맡는다 — **티켓은 여기서 탄다**
- * POST /bots/{id}/x/{무엇}       포크의 칸
+ * POST /bots/{id}/x/{무엇}       봇의 칸
  * ```
  */
 
@@ -79,7 +79,7 @@ export interface WebOptions {
   readonly serviceName: string;
   /** 첫 화면의 본문 — 그 봇의 `ABOUT.md`를 그린 것. 없으면 빈 문자열이다. */
   readonly about: string;
-  /** 포크가 봇 화면에 더하는 칸 — 없으면 템플릿의 것만 선다. */
+  /** 봇이 봇 화면에 더하는 칸 — 없으면 라이브러리의 것만 선다. */
   readonly panel?: BotPanel;
   /** 말 거는 사람이 무언가를 맡기는 자리 — 없으면 `/connect`가 404다. */
   readonly intake?: BotIntake;
@@ -118,7 +118,7 @@ async function handle(
 
   // ── 공개: 코어가 읽는 선언 ───────────────────────────────────────────────
   const declared = /^\/bots\/([0-9a-fA-F-]{36})\/manifest\.json$/.exec(path);
-  if (declared !== undefined && declared !== null && request.method === 'GET') {
+  if (declared !== null && request.method === 'GET') {
     const bot = await options.store.bot(declared[1] ?? '');
     if (bot === undefined) {
       send(response, 404, '<p>그런 봇이 없습니다.</p>');
@@ -235,7 +235,7 @@ async function handle(
     return;
   }
 
-  // **포크의 칸** — 경로는 템플릿이 쥐고 이름은 포크가 정한다.
+  // **봇의 칸** — 경로는 라이브러리가 쥐고 이름은 봇이 정한다.
   if (extra !== null && request.method === 'POST') {
     const bot = await ownBot(options, account, extra[1] ?? '');
     if (bot === undefined || options.panel === undefined) {
@@ -536,7 +536,7 @@ async function renderTab(
     return;
   }
 
-  // 포크의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
+  // 봇의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
   const panel = options.panel !== undefined && isConnected(bot)
     ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id)
     : '';

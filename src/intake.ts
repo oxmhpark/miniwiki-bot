@@ -3,16 +3,16 @@ import type { BotRecord } from './state.js';
 import { escapeHtml } from './text.js';
 
 /**
- * **사람이 봇에게 무언가를 맡기는 자리** — 포크가 선언하고, 템플릿이 그린다.
+ * **사람이 봇에게 무언가를 맡기는 자리** — 봇이 선언하고, 라이브러리가 그린다.
  *
  * 봇 화면(`panel.ts`)이 *임자*의 자리라면 여기는 **말 거는 사람**의 자리다. 그 사람은 이
  * 서비스의 계정이 없고 앞으로도 만들지 않는다 — 가진 것은 봇이 메시지로 보낸 **링크 하나**
  * (`/connect/{티켓}`)뿐이고, 그것이 곧 신원이다(`BOT.md`의 *비밀은 공개 글에 실리지 않는다*).
  *
- * **왜 템플릿이 지는가.** 채토는 LLM 키를, 다른 봇은 다른 것을 받겠지만 *받는 일*의 모양은
- * 같다 — 링크를 내고, 폼을 그리고, 봉해서 그 봇의 `users/{id}.json`에 넣는다. 포크가 저마다
+ * **왜 라이브러리가 지는가.** 채토는 LLM 키를, 다른 봇은 다른 것을 받겠지만 *받는 일*의 모양은
+ * 같다 — 링크를 내고, 폼을 그리고, 봉해서 그 봇의 `users/{id}.json`에 넣는다. 봇이 저마다
  * HTML을 쓰면 **봇마다 옷이 갈리고** 이스케이프도 저장소 수만큼 흩어진다(모체 `CLAUDE.md`의
- * *클라이언트 디자인 규칙*). 그래서 포크가 내는 것은 <b>무엇을 청하는가</b>뿐이다.
+ * *클라이언트 디자인 규칙*). 그래서 봇이 내는 것은 <b>무엇을 청하는가</b>뿐이다.
  *
  * **스크립트가 없다.** 폼 하나이고, 티켓이 비밀이라 CSRF 토큰을 따로 두지 않는다.
  */
@@ -64,7 +64,7 @@ export type IntakeField =
       readonly note?: string;
     };
 
-/** 맡기는 화면에 설 것들 — **포크가 낸다**. */
+/** 맡기는 화면에 설 것들 — **봇이 낸다**. */
 export interface IntakeView {
   /** 이 자리의 제목 — *채토에 키 맡기기*. */
   readonly title: string;
@@ -80,7 +80,7 @@ export interface BotIntake {
   describe(who: IntakeWho, bot: BotRecord, ctx: BotContext): Promise<IntakeView>;
 
   /**
-   * 받은 것을 그 사람의 기록으로 — **봉하는 것도 포크의 일이다**(`ctx.sealer`).
+   * 받은 것을 그 사람의 기록으로 — **봉하는 것도 봇의 일이다**(`ctx.sealer`).
    *
    * **던지면 그 문장이 폼 위에 서고 티켓은 살아 있다** — 한 번 잘못 붙였다고 링크를 다시
    * 받게 하지 않는다. 돌려준 말은 마친 화면에 선다.
@@ -123,7 +123,7 @@ function draw(one: IntakeField): string {
       one.hint === undefined ? '' : ` placeholder="${escapeHtml(one.hint)}"`}></label>${filled}${note}</p>`;
 }
 
-/** 폼을 그린다 — **주소는 템플릿이 쥔다**(`/connect/{티켓}`). */
+/** 폼을 그린다 — **주소는 라이브러리가 쥔다**(`/connect/{티켓}`). */
 export function renderIntake(view: IntakeView, token: string): string {
   const intro = (view.intro ?? []).map((line) => `<p>${escapeHtml(line)}</p>`).join('');
 

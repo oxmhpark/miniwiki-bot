@@ -182,8 +182,8 @@
 ```sh
 gh repo create oxmhpark/miniwiki-bot-{이름} --private --clone
 cd miniwiki-bot-{이름}
-npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.3.0
-cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · Procfile · manifest.json · main.ts
+npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.6.0
+cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · manifest.json · main.ts
 ```
 
 **2026-09-24까지는 포크였다.** 라이브러리 저장소를 clone해 파일 열일곱 개를 복사해 두고,
@@ -201,7 +201,7 @@ cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · Proc
 ### 왜 git 태그 의존인가 — **라이브러리가 공개이기 때문이다**
 
 ```json
-"dependencies": { "miniwiki-bot": "github:oxmhpark/miniwiki-bot#v0.3.0" }
+"dependencies": { "miniwiki-bot": "github:oxmhpark/miniwiki-bot#v0.6.0" }
 ```
 
 `miniwiki-bot`은 **공개 저장소**다(2026-09-24). 그래서 `npm ci`가 **인증 없이** 받아 오고,
@@ -214,7 +214,7 @@ cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · Proc
 > 다시 돌려 `--ignore-scripts`가 필요했다. **라이브러리를 공개로 바꾸면서 그 둘 다 사라졌다.**
 
 - **판은 태그다.** 라이브러리에서 `npm version minor && git push --follow-tags`, 봇에서
-  `npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.4.0`.
+  `npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.6.0`.
 - **`package-lock.json`에 커밋 sha가 박힌다** — 태그를 옮겨도 봇은 받던 것을 계속 받는다.
 - **`dist`는 저장소에 없다.** 설치할 때 라이브러리의 `prepare`가 `tsc`를 돌려 만든다.
 - **`tsconfig.base.json`도 라이브러리가 낸다** — `"extends": "miniwiki-bot/tsconfig.base.json"`.

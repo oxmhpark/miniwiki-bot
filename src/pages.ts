@@ -5,7 +5,7 @@ import { escapeHtml } from './text.js';
 /**
  * 사람이 보는 그림 — **여기만 HTML을 쓴다**.
  *
- * `web.ts`는 문을 열고 폼을 받는 자리이고, 그림은 이 파일과 `panel.ts`(포크의 칸)에 있다.
+ * `web.ts`는 문을 열고 폼을 받는 자리이고, 그림은 이 파일과 `panel.ts`(봇의 칸)에 있다.
  * 가른 까닭은 **한 화면이 한 가지 일만 하게 하려는 것**이다 — 목록과 만들기가 한 장에 서면
  * 봇이 셋일 때 만들기 폼이 목록을 밀어내고, 봇이 없을 때는 목록 자리가 비어 선다.
  *
@@ -18,7 +18,7 @@ import { escapeHtml } from './text.js';
  * /bots                 내 봇들            — 고르는 자리
  * /bots/new             봇 만들기          — 짓는 자리
  * /bots/{id}            **등록정보**       — 이름·소개·초상화·배경
- * /bots/{id}/features   **기능**           — 그 봇 고유의 것(포크의 칸)
+ * /bots/{id}/features   **기능**           — 그 봇 고유의 것(봇의 칸)
  * /bots/{id}/auth       **인증**           — 선언 주소와 자격 증명, 설치에 드는 것
  * /bots/{id}/advanced   **고급**           — 멈춤과 지우기
  * /bots/{id}/delete     지우기 전에 한 번  — 되돌릴 수 없는 것 앞의 한 걸음
@@ -152,8 +152,8 @@ function who(service: string, account?: AccountRecord): string {
  * **첫 화면**(`/`) — 이 서비스가 무엇인가.
  *
  * 본문은 그 봇의 `ABOUT.md`다(2026-09-23 요구) — **`README.md`가 아니다**. 그 파일은 저장소를
- * 여는 개발자의 것이고 템플릿에도 있어야 하는데, 첫 화면까지 그것으로 지면 **포크가 merge할
- * 때마다 부딪힌다**. 화면에 설 말은 화면의 파일에 적는다.
+ * 여는 개발자의 것이고 라이브러리에도 있어야 한다 — 독자가 다른 글이다(`BOT.md`와 `PROJECT.md`를
+ * 가른 것과 같은 까닭). 화면에 설 말은 화면의 파일에 적는다.
  *
  * **없어도 막히지 않는다** — 제목줄과 단추만 서고 소개 한 줄이 그 자리를 지킨다.
  *
@@ -306,7 +306,7 @@ export function profileTab(bot: BotRecord, line?: string): string {
 /**
  * **기능** — 그 봇 고유의 것.
  *
- * 포크가 `BotPanel`로 선언한 칸이 여기 선다(`panel.ts`가 그린다). **이어진 뒤에만 설 수
+ * 봇이 `BotPanel`로 선언한 칸이 여기 선다(`panel.ts`가 그린다). **이어진 뒤에만 설 수
  * 있다** — 그 전에는 시에라를 부를 수 없어 무엇이 있는지도 물을 수 없다.
  */
 export function featuresTab(bot: BotRecord, panel: string, line?: string): string {
@@ -314,7 +314,7 @@ export function featuresTab(bot: BotRecord, panel: string, line?: string): strin
     ? panel
     : isConnected(bot)
       ? `<p>이 봇이 화면에 더한 칸이 없습니다.
-         <small>포크가 <code>BotPanel</code>을 주면 그 칸이 여기 섭니다.</small></p>`
+         <small>봇이 <code>BotPanel</code>을 주면 그 칸이 여기 섭니다.</small></p>`
       : '<p>이은 뒤에 섭니다 — 그 전에는 시에라에 물을 수 없습니다.</p>';
 
   return shell(bot, 'features', body, line);

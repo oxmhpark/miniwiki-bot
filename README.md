@@ -1,7 +1,7 @@
 # miniwiki-bot — 시에라에 붙는 봇의 라이브러리
 
 **한 배포가 봇 여럿을 지는 봇 서비스의 바탕이다.** 실제 봇(`miniwiki-bot-{이름}`)은 이 저장소를
-**포크하지 않고 의존한다**(2026-09-24 전환) — `github:oxmhpark/miniwiki-bot#v0.3.0`.
+**포크하지 않고 의존한다**(2026-09-24 전환) — `github:oxmhpark/miniwiki-bot#v0.6.0`.
 설계와 그 까닭은 [`.claude/PROJECT.md`](./.claude/PROJECT.md), 봇 일반의 것은
 [`.claude/BOT.md`](./.claude/BOT.md)에 있다.
 
@@ -44,8 +44,8 @@ docker run --rm -v "$PWD":/src -w /src node:24 sh -c "npm ci && npm run typechec
 ```sh
 gh repo create oxmhpark/miniwiki-bot-{이름} --private --clone
 cd miniwiki-bot-{이름}
-npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.3.0
-cp -r node_modules/miniwiki-bot/template/. .   # Dockerfile · compose · Procfile · manifest.json · main.ts
+npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.6.0
+cp -r node_modules/miniwiki-bot/template/. .   # Dockerfile · compose · manifest.json · main.ts
 ```
 
 짓는 것은 `src/main.ts`와 그 아래뿐이다. 그리고 **`ABOUT.md`를 둔다** — 첫 화면(`/`)에
