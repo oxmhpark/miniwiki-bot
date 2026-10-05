@@ -38,7 +38,7 @@ export function page(title: string, body: string): string {
   body { max-width: 38rem; margin: 2rem auto; padding: 0 1rem;
          font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
   code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
-  input, select { width: 100%; padding: .4rem; font: inherit; }
+  input, select, textarea { width: 100%; padding: .4rem; font: inherit; }
   label { display: block; }
   small { display: block; color: #666; margin-top: .2rem; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 1rem 0; }

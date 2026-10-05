@@ -35,6 +35,23 @@ export type BotField =
       readonly note?: string;
     }
   | {
+      /**
+       * **여러 줄 칸** — 목록처럼 한 줄에 하나씩 적는 값.
+       *
+       * 한 줄 칸에 공백·쉼표로 늘어놓으면 **어디서 갈리는지를 봇마다 따로 정하게 된다** —
+       * 줄바꿈이 그 규약을 대신한다. 값은 적힌 그대로 오고 줄을 가르는 것은 봇의 몫이다.
+       */
+      readonly type: 'lines';
+      readonly name: string;
+      readonly label: string;
+      readonly value: string;
+      /** 보이는 줄 수 — 기본 4. */
+      readonly rows?: number;
+      readonly maxLength?: number;
+      readonly placeholder?: string;
+      readonly note?: string;
+    }
+  | {
       readonly type: 'choice';
       readonly name: string;
       readonly label: string;
@@ -121,6 +138,14 @@ function field(one: BotField): string {
     return `<p><label>${esc(one.label)}
       <input type="number" name="${esc(one.name)}" value="${one.value}"${bounds} required>
       </label>${one.unit === undefined ? '' : `<small>${esc(one.unit)}</small>`}${note}</p>`;
+  }
+
+  if (one.type === 'lines') {
+    return `<p><label>${esc(one.label)}
+      <textarea name="${esc(one.name)}" rows="${one.rows ?? 4}"${
+        one.maxLength === undefined ? '' : ` maxlength="${one.maxLength}"`}${
+        one.placeholder === undefined ? '' : ` placeholder="${esc(one.placeholder)}"`}>${
+        esc(one.value)}</textarea></label>${note}</p>`;
   }
 
   return `<p><label>${esc(one.label)}
