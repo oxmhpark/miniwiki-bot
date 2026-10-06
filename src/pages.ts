@@ -38,7 +38,7 @@ export function page(title: string, body: string): string {
   body { max-width: 38rem; margin: 2rem auto; padding: 0 1rem;
          font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
   code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
-  input, select, textarea { width: 100%; padding: .4rem; font: inherit; }
+  input, select, textarea { width: 100%; padding: .4rem; font: inherit; box-sizing: border-box; }
   fieldset { border: 1px solid #ddd; border-radius: .3rem; margin: 1rem 0; padding: .2rem 1rem .6rem; }
   legend { font-weight: 600; padding: 0 .3rem; }
   .tokens { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0; }
