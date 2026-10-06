@@ -209,9 +209,12 @@ export interface Sierra {
    * 문서의 쓰기 사슬을 지나야 하고(조상을 포함한다 — 38 확정 9) 라벨과 태그는 그 문서가 정한다.
    *
    * **확장이 없는 시에라에서는 404다** — 부르는 쪽이 미디어 직접 올리기로 물러선다.
+   *
+   * **태그는 여럿일 수 있다**(2026-10-07) — `tag` 칸을 거듭 적는다. 코어가 하나만 받던 판에서는
+   * 마지막 하나만 붙는다.
    */
   uploadAsset(
-    bytes: Uint8Array, mime: string, name: string, tag?: string, document?: string,
+    bytes: Uint8Array, mime: string, name: string, tag?: string | readonly string[], document?: string,
   ): Promise<{ readonly id: string }>;
 
   /**
@@ -394,13 +397,15 @@ export class SierraClient implements Sierra {
   }
 
   async uploadAsset(
-    bytes: Uint8Array, mime: string, name: string, tag?: string, document?: string,
+    bytes: Uint8Array, mime: string, name: string, tag?: string | readonly string[], document?: string,
   ): Promise<{ readonly id: string }> {
     const form = new FormData();
     form.set('file', new Blob([bytes], { type: mime }), name);
     form.set('name', name);
-    if (tag !== undefined && tag !== '') {
-      form.set('tag', tag);
+    for (const one of typeof tag === 'string' ? [tag] : tag ?? []) {
+      if (one !== '') {
+        form.append('tag', one);
+      }
     }
     if (document !== undefined && document !== '') {
       form.set('document', document);
