@@ -73,3 +73,27 @@ describe('칩 칸', () => {
     expect(renderPanel({ fields: [{ type: 'text', name: 'x', label: 'x', value: '' }] }, 'b1')).not.toContain('<script>');
   });
 });
+
+describe('목록', () => {
+  const html = renderPanel({
+    lists: [{
+      name: 'repos', label: '저장소', note: '설명',
+      items: [{ key: 'o/r', label: 'github.com/o/r', note: '토큰 있음', fields: [{ type: 'secret', name: 'token', label: '토큰', filled: true }] }],
+      add: { label: '저장소 추가', fields: [{ type: 'text', name: 'url', label: '주소', value: '' }, { type: 'secret', name: 'token', label: '토큰' }] },
+    }],
+  }, 'b1');
+
+  it('항목은 펼침이고, 고치기·빼기·추가가 저마다 폼으로 선다', () => {
+    expect(html).toContain('<summary>github.com/o/r <small>토큰 있음</small></summary>');
+    expect(html.match(/action="\/bots\/b1\/x\/list"/g)).toHaveLength(3);
+    expect(html).toContain('name="op" value="edit"><input type="hidden" name="key" value="o/r">');
+    expect(html).toContain('name="op" value="remove">');
+    expect(html).toContain('<summary class="button plain">저장소 추가</summary>');
+  });
+
+  it('펼침을 접는 스크립트가 붙고, 그것은 문법이 맞다', () => {
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((one) => one[1] ?? '');
+    expect(scripts).toHaveLength(1);
+    expect(() => new Function(scripts[0] ?? '')).not.toThrow();
+  });
+});

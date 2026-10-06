@@ -127,6 +127,32 @@ export interface BotAction {
   readonly note?: string;
 }
 
+/**
+ * **목록** — 항목마다 따로 저장되는 것들(저장소와 그 토큰 따위, 2026-10-07 요구).
+ *
+ * 한 폼에 줄 목록과 그 줄마다의 칸을 함께 세우면 *저장하고 나서야 칸이 생기는* 두 걸음이 된다.
+ * 목록은 그것을 한 걸음으로 만든다: **추가는 칸을 한꺼번에 받고, 항목을 누르면 그 항목의 칸이
+ * 펼쳐진다.** 펼침은 `<details>`가 맡는다(스크립트는 바깥 누름·`Esc`로 접기만 거든다).
+ *
+ * 항목마다 폼이 따로라 설정 폼 **밖에** 선다 — 폼은 겹칠 수 없다.
+ */
+export interface BotList {
+  /** 봇이 받는 이름 — `BotPanel.list`의 `list`. */
+  readonly name: string;
+  readonly label: string;
+  readonly note?: string;
+  readonly items: readonly {
+    /** 항목을 가리키는 열쇠 — 고치기·빼기에 돌아온다. */
+    readonly key: string;
+    readonly label: string;
+    /** 항목 옆에 작게 서는 말 — `토큰 있음`. */
+    readonly note?: string;
+    /** 펼치면 서는 칸 — 비면 빼기만 선다. */
+    readonly fields: readonly BotField[];
+  }[];
+  readonly add: { readonly label: string; readonly fields: readonly BotField[] };
+}
+
 /** 봇 화면에 설 것들 — **봇이 내고 라이브러리가 그린다**. */
 export interface PanelView {
   /**
@@ -141,6 +167,7 @@ export interface PanelView {
   readonly facts?: readonly (readonly [string, string])[];
 
   readonly fields?: readonly BotField[];
+  readonly lists?: readonly BotList[];
   readonly actions?: readonly BotAction[];
 }
 
@@ -155,8 +182,17 @@ export interface BotPanel {
    */
   save?(values: URLSearchParams, bot: BotRecord, ctx: BotContext): Promise<string | undefined>;
 
-  /** 단추를 눌렀다. 던지면 그 문장이 화면에 선다. */
+  /** 단추를 눌렀다. 던지면 그 문장이 화면에 선다. **`settings`·`list`는 라이브러리가 쥔 이름이다.** */
   act?(name: string, bot: BotRecord, ctx: BotContext): Promise<string | undefined>;
+
+  /**
+   * 목록을 고쳤다 — `add`는 `key`가 비고, `edit`·`remove`는 그 항목의 `key`다. `values`는 그
+   * 폼의 칸들이다. **던지면 그 문장이 화면에 선다.**
+   */
+  list?(
+    op: 'add' | 'edit' | 'remove', list: string, key: string, values: URLSearchParams,
+    bot: BotRecord, ctx: BotContext,
+  ): Promise<string | undefined>;
 }
 
 /** 사람이 적은 것이 화면으로 나가는 자리는 **여기 하나**다. */
@@ -350,6 +386,45 @@ const CHIPS = `<script>(() => {
 })();</script>`;
 
 /**
+ * **펼친 목록 항목을 접는다** — 바깥을 누르거나 `Esc`(모체 `CLAUDE.md`의 펼침메뉴 규칙). 여는 것은
+ * `<details>`가 한다.
+ */
+const FOLD = `<script>(() => {
+  const open = () => document.querySelectorAll('.list details[open]');
+  document.addEventListener('click', (event) => {
+    for (const one of open()) if (!one.contains(event.target)) one.open = false;
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    for (const one of open()) { one.open = false; one.querySelector('summary')?.focus(); }
+  });
+})();</script>`;
+
+function listHtml(one: BotList, botId: string): string {
+  const action = `/bots/${botId}/x/list`;
+  const hidden = (op: string, key: string): string => `<input type="hidden" name="list" value="${esc(one.name)}">
+      <input type="hidden" name="op" value="${op}"><input type="hidden" name="key" value="${esc(key)}">`;
+
+  const items = one.items.map((item) => `<li><details>
+      <summary>${esc(item.label)}${item.note === undefined ? '' : ` <small>${esc(item.note)}</small>`}</summary>
+      ${item.fields.length === 0 ? '' : `<form method="post" action="${action}">${hidden('edit', item.key)}
+        ${item.fields.map(field).join('')}
+        <p><button class="button" type="submit">저장한다</button></p></form>`}
+      <form method="post" action="${action}" class="grave">${hidden('remove', item.key)}
+        <button class="danger" type="submit">빼기</button></form>
+    </details></li>`).join('');
+
+  return `<fieldset class="list"><legend>${esc(one.label)}</legend>
+    ${one.note === undefined ? '' : `<small>${esc(one.note)}</small>`}
+    ${items === '' ? '' : `<ul>${items}</ul>`}
+    <details class="add"><summary class="button plain">${esc(one.add.label)}</summary>
+      <form method="post" action="${action}">${hidden('add', '')}
+        ${one.add.fields.map(field).join('')}
+        <p><button class="button" type="submit">더한다</button></p></form>
+    </details></fieldset>`;
+}
+
+/**
  * 칸을 그린다 — **폼의 주소는 라이브러리가 쥔다**(`x/settings` · `x/{단추}`).
  *
  * **되돌릴 수 없는 단추는 가로줄 아래에 모은다**(모체 `CLAUDE.md`의 펼침메뉴 규칙과 같은
@@ -363,7 +438,13 @@ export function renderPanel(view: PanelView, botId: string): string {
     <form method="post" action="/bots/${botId}/x/settings">
       ${grouped(view.fields ?? [])}
       <p><button class="button" type="submit">저장한다</button></p>
-    </form>${(view.fields ?? []).some((one) => one.type === 'tokens') ? CHIPS : ''}`;
+    </form>`;
+
+  const lists = (view.lists ?? []).map((one) => listHtml(one, botId)).join('');
+  const listed = lists === '' ? '' : `${lists}${FOLD}`;
+  const chips = [...(view.fields ?? []), ...(view.lists ?? []).flatMap((one) => [
+    ...one.add.fields, ...one.items.flatMap((item) => item.fields),
+  ])].some((one) => one.type === 'tokens');
 
   const buttons = view.actions ?? [];
   const draw = (one: BotAction): string => `
@@ -376,6 +457,6 @@ export function renderPanel(view: PanelView, botId: string): string {
   const grave = buttons.filter((one) => one.grave === true).map(draw).join('');
 
   return `${view.title === undefined ? '' : `<h2>${esc(view.title)}</h2>`}
-    ${facts}${fields}${plain}
+    ${facts}${fields}${listed}${chips ? CHIPS : ''}${plain}
     ${grave === '' ? '' : `<div class="grave">${grave}</div>`}`;
 }

@@ -252,9 +252,19 @@ async function handle(
     let line: string | undefined;
 
     try {
-      line = name === 'settings'
-        ? await options.panel.save?.(await readForm(request), bot, ctx)
-        : await options.panel.act?.(name, bot, ctx);
+      if (name === 'settings') {
+        line = await options.panel.save?.(await readForm(request), bot, ctx);
+      } else if (name === 'list') {
+        // **목록의 폼** — 어느 목록의 어느 항목에 무엇을 하는가가 칸으로 온다(`panel.ts`의 `BotList`).
+        const form = await readForm(request);
+        const op = form.get('op');
+        if (op !== 'add' && op !== 'edit' && op !== 'remove') {
+          throw new Error('목록에 할 일이 이상하다.');
+        }
+        line = await options.panel.list?.(op, form.get('list') ?? '', form.get('key') ?? '', form, bot, ctx);
+      } else {
+        line = await options.panel.act?.(name, bot, ctx);
+      }
     } catch (error) {
       send(response, 400, stopPage('안 됐다',
         `<p>${escapeHtml((error as Error).message)}</p>`, `/bots/${bot.id}`));

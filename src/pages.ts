@@ -55,6 +55,17 @@ export function page(title: string, body: string): string {
                                  width: 1.1rem; height: 1.1rem; padding: 0; border: 0; border-radius: 50%;
                                  background: #b5b5b5; color: #fff; font-size: .8rem; line-height: 1; }
   .chip-field button.chip-drop:hover { background: #888; }
+  /* **목록** — 항목을 누르면 그 자리에서 펼쳐지고, 추가는 단추가 펼친다(panel.ts의 BotList). */
+  .list ul { list-style: none; padding: 0; margin: .4rem 0; }
+  .list li { border: 1px solid #ddd; border-radius: .3rem; margin: .4rem 0; }
+  .list li summary { padding: .5rem .8rem; cursor: pointer; }
+  .list li summary small { display: inline; margin-left: .4rem; }
+  .list li details > form { padding: 0 .8rem; }
+  .list li details > form.grave { margin: 0 0 .8rem; }
+  .list details.add { margin-top: .6rem; }
+  .list details.add > summary { list-style: none; }
+  .list details.add > summary::-webkit-details-marker { display: none; }
+  .list details.add[open] > summary { margin-bottom: .4rem; }
   .chip-field input.chip-entry { flex: 1 1 6rem; min-width: 6rem; width: auto; border: 0; outline: 0;
                                  padding: .15rem 0; background: none; color: inherit; }
   label { display: block; }
@@ -116,7 +127,7 @@ export function page(title: string, body: string): string {
     .chip-field button.chip-drop { background: #555; color: #e8e8e8; }
     .grave { border-top-color: #333; }
     small, dt { color: #9a9a9a; }
-    .bots li { border-color: #333; }
+    .bots li, .list li { border-color: #333; }
     .tabs { border-bottom-color: #333; }
     .tabs a { color: #9a9a9a; }
     .tabs a[aria-current] { color: #e8e8e8; border-bottom-color: #e8e8e8; }
