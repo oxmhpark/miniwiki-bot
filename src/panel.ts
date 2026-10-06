@@ -153,6 +153,22 @@ export interface BotList {
   readonly add: { readonly label: string; readonly fields: readonly BotField[] };
 }
 
+/**
+ * **서브탭 하나** — 칸이 길어진 봇이 기능마다 장을 가른다(2026-10-07 요구).
+ *
+ * 위의 탭처럼 **주소가 탭이다**(`?sub=이름`) — 새로고침해도 그 자리이고 스크립트가 없어도 선다.
+ * 장마다 그 장의 칸만 보이므로, 저장할 때 **보이지 않은 장의 칸은 라이브러리가 지금 값으로 채워**
+ * 봇에게 넘긴다(`fillHidden`) — 봇의 `save`는 늘 칸 전부를 받는다.
+ */
+export interface PanelTab {
+  readonly name: string;
+  readonly label: string;
+  readonly facts?: readonly (readonly [string, string])[];
+  readonly fields?: readonly BotField[];
+  readonly lists?: readonly BotList[];
+  readonly actions?: readonly BotAction[];
+}
+
 /** 봇 화면에 설 것들 — **봇이 내고 라이브러리가 그린다**. */
 export interface PanelView {
   /**
@@ -169,6 +185,9 @@ export interface PanelView {
   readonly fields?: readonly BotField[];
   readonly lists?: readonly BotList[];
   readonly actions?: readonly BotAction[];
+
+  /** **서브탭** — 있으면 위의 `facts`·`fields`·`lists`·`actions` 대신 장마다 선다. */
+  readonly tabs?: readonly PanelTab[];
 }
 
 export interface BotPanel {
@@ -400,9 +419,9 @@ const FOLD = `<script>(() => {
   });
 })();</script>`;
 
-function listHtml(one: BotList, botId: string): string {
+function listHtml(one: BotList, botId: string, at: string): string {
   const action = `/bots/${botId}/x/list`;
-  const hidden = (op: string, key: string): string => `<input type="hidden" name="list" value="${esc(one.name)}">
+  const hidden = (op: string, key: string): string => `${at}<input type="hidden" name="list" value="${esc(one.name)}">
       <input type="hidden" name="op" value="${op}"><input type="hidden" name="key" value="${esc(key)}">`;
 
   const items = one.items.map((item) => `<li><details>
@@ -430,17 +449,34 @@ function listHtml(one: BotList, botId: string): string {
  * **되돌릴 수 없는 단추는 가로줄 아래에 모은다**(모체 `CLAUDE.md`의 펼침메뉴 규칙과 같은
  * 정신이다 — 되돌릴 수 있는 것과 없는 것을 가로줄로 나눈다).
  */
-export function renderPanel(view: PanelView, botId: string): string {
+export function renderPanel(view: PanelView, botId: string, sub?: string): string {
+  const title = view.title === undefined ? '' : `<h2>${esc(view.title)}</h2>`;
+  if (view.tabs === undefined || view.tabs.length === 0) {
+    return `${title}${section(view, botId, '')}`;
+  }
+
+  const chosen = view.tabs.find((one) => one.name === sub) ?? view.tabs[0];
+  const nav = view.tabs.map((one) => `<a href="/bots/${botId}/features?sub=${encodeURIComponent(one.name)}"${
+    one === chosen ? ' aria-current="page"' : ''}>${esc(one.label)}</a>`).join('');
+
+  return `${title}
+    <nav class="subtabs">${nav}</nav>
+    ${chosen === undefined ? '' : section(chosen, botId, chosen.name)}`;
+}
+
+/** 한 장 — 서브탭이 없으면 화면 전체, 있으면 고른 장. 폼마다 **돌아올 장**을 싣는다. */
+function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: string): string {
+  const at = tab === '' ? '' : `<input type="hidden" name="_tab" value="${esc(tab)}">`;
   const facts = (view.facts ?? []).length === 0 ? '' : `<dl>${
     (view.facts ?? []).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
 
   const fields = (view.fields ?? []).length === 0 ? '' : `
-    <form method="post" action="/bots/${botId}/x/settings">
+    <form method="post" action="/bots/${botId}/x/settings">${at}
       ${grouped(view.fields ?? [])}
       <p><button class="button" type="submit">저장한다</button></p>
     </form>`;
 
-  const lists = (view.lists ?? []).map((one) => listHtml(one, botId)).join('');
+  const lists = (view.lists ?? []).map((one) => listHtml(one, botId, at)).join('');
   const listed = lists === '' ? '' : `${lists}${FOLD}`;
   const chips = [...(view.fields ?? []), ...(view.lists ?? []).flatMap((one) => [
     ...one.add.fields, ...one.items.flatMap((item) => item.fields),
@@ -448,7 +484,7 @@ export function renderPanel(view: PanelView, botId: string): string {
 
   const buttons = view.actions ?? [];
   const draw = (one: BotAction): string => `
-    <form method="post" action="/bots/${botId}/x/${esc(one.name)}">
+    <form method="post" action="/bots/${botId}/x/${esc(one.name)}">${at}
       <button type="submit">${esc(one.label)}</button>
       ${one.note === undefined ? '' : `<small>${esc(one.note)}</small>`}
     </form>`;
@@ -456,7 +492,25 @@ export function renderPanel(view: PanelView, botId: string): string {
   const plain = buttons.filter((one) => one.grave !== true).map(draw).join('');
   const grave = buttons.filter((one) => one.grave === true).map(draw).join('');
 
-  return `${view.title === undefined ? '' : `<h2>${esc(view.title)}</h2>`}
-    ${facts}${fields}${listed}${chips ? CHIPS : ''}${plain}
+  return `${facts}${fields}${listed}${chips ? CHIPS : ''}${plain}
     ${grave === '' ? '' : `<div class="grave">${grave}</div>`}`;
+}
+
+/**
+ * **보이지 않은 장의 칸을 지금 값으로 채운다** — 서브탭의 한 장에서 저장하면 폼에는 그 장의 칸만
+ * 온다. 봇의 `save`가 빠진 칸을 *비운 것*으로 읽지 않게 여기서 메운다.
+ *
+ * 비밀 칸은 채우지 않는다 — 값이 화면에 없고, 빈 비밀은 이미 *그대로 둔다*는 뜻이다.
+ */
+export function fillHidden(view: PanelView, form: URLSearchParams): URLSearchParams {
+  const filled = new URLSearchParams(form);
+
+  for (const one of (view.tabs ?? []).flatMap((tab) => tab.fields ?? [])) {
+    if (filled.has(one.name) || one.type === 'secret') {
+      continue;
+    }
+    filled.set(one.name, one.type === 'tokens' ? one.value.join(' ') : String(one.value));
+  }
+
+  return filled;
 }

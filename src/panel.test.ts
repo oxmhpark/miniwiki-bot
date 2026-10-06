@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readTokens, renderPanel } from './panel.js';
+import { fillHidden, readTokens, renderPanel } from './panel.js';
 
 describe('renderPanel', () => {
   it('여러 줄 칸은 textarea로 서고 값을 이스케이프한다', () => {
@@ -95,5 +95,45 @@ describe('목록', () => {
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((one) => one[1] ?? '');
     expect(scripts).toHaveLength(1);
     expect(() => new Function(scripts[0] ?? '')).not.toThrow();
+  });
+});
+
+describe('서브탭', () => {
+  const view = {
+    tabs: [
+      { name: 'post', label: '복제', facts: [['복제', '서 있다']] as [string, string][],
+        fields: [{ type: 'tokens' as const, name: 'postTags', label: '태그', value: ['a', 'b'], group: '복제 태그' }],
+        actions: [{ name: 'publish-now', label: '즉시 복제', grave: true }] },
+      { name: 'chat', label: '대화',
+        fields: [
+          { type: 'number' as const, name: 'n', label: '수', value: 3 },
+          { type: 'choice' as const, name: 'm', label: '모델', value: 'x', options: [{ value: 'x', label: 'x' }] },
+          { type: 'secret' as const, name: 's', label: '비밀' },
+        ] },
+    ],
+  };
+
+  it('주소가 고른 장만 그리고, 폼마다 돌아올 장을 싣는다', () => {
+    const html = renderPanel(view, 'b1', 'chat');
+
+    expect(html).toContain('<a href="/bots/b1/features?sub=chat" aria-current="page">대화</a>');
+    expect(html).toContain('name="n"');
+    expect(html).not.toContain('name="postTags"');
+    expect(html).toContain('<input type="hidden" name="_tab" value="chat">');
+  });
+
+  it('모르는 장이면 첫 장이다', () => {
+    const html = renderPanel(view, 'b1', 'nope');
+    expect(html).toContain('name="postTags"');
+    expect(html.match(/name="_tab" value="post"/g)).toHaveLength(2);
+  });
+
+  it('보이지 않은 장의 칸을 지금 값으로 채우고, 보낸 칸과 비밀은 건드리지 않는다', () => {
+    const filled = fillHidden(view, new URLSearchParams({ n: '5', _tab: 'chat' }));
+
+    expect(filled.get('n')).toBe('5');
+    expect(filled.get('m')).toBe('x');
+    expect(filled.get('postTags')).toBe('a b');
+    expect(filled.has('s')).toBe(false);
   });
 });

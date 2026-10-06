@@ -96,6 +96,11 @@ export function page(title: string, body: string): string {
   .tabs a { padding: .4rem .8rem; text-decoration: none; color: #666;
             border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tabs a[aria-current] { color: #1a1a1a; font-weight: 600; border-bottom-color: #1a1a1a; }
+  /* **서브탭** — 기능 탭 안의 장. 위의 탭과 같이 주소가 탭이고, 한 단 낮아 알약 모양이다. */
+  .subtabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0 0 1rem; }
+  .subtabs a { padding: .2rem .8rem; border: 1px solid #ddd; border-radius: 1rem; text-decoration: none;
+               color: #666; font-size: .95rem; }
+  .subtabs a[aria-current] { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
   /* **아직 서지 않은 칸도 자리를 지킨다** — 감추면 무엇이 남았는지 볼 수 없다. */
   .todo input { opacity: .6; }
   .bots { list-style: none; padding: 0; }
@@ -131,6 +136,8 @@ export function page(title: string, body: string): string {
     .tabs { border-bottom-color: #333; }
     .tabs a { color: #9a9a9a; }
     .tabs a[aria-current] { color: #e8e8e8; border-bottom-color: #e8e8e8; }
+    .subtabs a { border-color: #333; color: #9a9a9a; }
+    .subtabs a[aria-current] { background: #e8e8e8; border-color: #e8e8e8; color: #161616; }
     .button, button { background: #e8e8e8; color: #161616; border-color: #e8e8e8; }
     form button:not(.button) { background: #161616; color: #e8e8e8; }
     a.button.plain { background: #161616; color: #e8e8e8; }

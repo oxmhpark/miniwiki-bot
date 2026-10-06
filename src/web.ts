@@ -12,7 +12,7 @@ import {
   advancedTab, authTab, deletePage, featuresTab, guestPage, homePage, landingPage, newBotPage,
   noRoomPage, profileTab, stopPage,
 } from './pages.js';
-import { renderPanel, type BotPanel } from './panel.js';
+import { fillHidden, renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
 import type { AccountRecord, BotDeclaration, BotRecord, FileStore } from './state.js';
@@ -249,14 +249,17 @@ async function handle(
 
     const name = extra[2] ?? '';
     const ctx = options.fleet.contextOf(bot);
+    const form = await readForm(request);
+    // **폼을 낸 장으로 돌아간다**(서브탭) — 첫 장으로 떨어지면 저장이 됐나를 다시 찾게 된다.
+    const tabName = form.get('_tab') ?? undefined;
     let line: string | undefined;
 
     try {
       if (name === 'settings') {
-        line = await options.panel.save?.(await readForm(request), bot, ctx);
+        const filled = tabName === undefined ? form : fillHidden(await options.panel.describe(bot, ctx), form);
+        line = await options.panel.save?.(filled, bot, ctx);
       } else if (name === 'list') {
         // **목록의 폼** — 어느 목록의 어느 항목에 무엇을 하는가가 칸으로 온다(`panel.ts`의 `BotList`).
-        const form = await readForm(request);
         const op = form.get('op');
         if (op !== 'add' && op !== 'edit' && op !== 'remove') {
           throw new Error('목록에 할 일이 이상하다.');
@@ -267,7 +270,7 @@ async function handle(
       }
     } catch (error) {
       send(response, 400, stopPage('안 됐다',
-        `<p>${escapeHtml((error as Error).message)}</p>`, `/bots/${bot.id}`));
+        `<p>${escapeHtml((error as Error).message)}</p>`, `/bots/${bot.id}/features${subQuery(tabName)}`));
       return;
     }
 
@@ -288,7 +291,7 @@ async function handle(
     }
 
     // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.
-    back(response, bot.id, 'features', line);
+    back(response, bot.id, 'features', line, tabName);
     return;
   }
 
@@ -369,7 +372,7 @@ async function botAction(
 
   // **탭은 GET이다** — 각자 주소를 가진 네 장이라 새로고침해도 그 자리다.
   if (!post && (verb === 'features' || verb === 'auth' || verb === 'advanced')) {
-    await renderTab(response, options, bot, verb, said(request));
+    await renderTab(response, options, bot, verb, said(request), sub(request));
     return;
   }
 
@@ -407,6 +410,11 @@ async function botAction(
 }
 
 /** 주소에 실려 온 한 마디 — 탭을 옮겨도 같은 자리에서 읽는다. */
+/** 기능 탭의 서브탭 — `?sub=이름`. */
+function sub(request: IncomingMessage): string | undefined {
+  return new URL(request.url ?? '/', 'http://x').searchParams.get('sub') ?? undefined;
+}
+
 function said(request: IncomingMessage): string | undefined {
   return new URL(request.url ?? '/', 'http://x').searchParams.get('said') ?? undefined;
 }
@@ -549,7 +557,7 @@ async function deleteBot(
 
 /** 탭 하나를 그린다 — **어느 장인지는 주소가 정하고, 머리와 탭 줄은 `pages.ts`가 진다.** */
 async function renderTab(
-  response: ServerResponse, options: WebOptions, bot: BotRecord, tab: BotTab, line?: string,
+  response: ServerResponse, options: WebOptions, bot: BotRecord, tab: BotTab, line?: string, subTab?: string,
 ): Promise<void> {
   if (tab === 'profile') {
     send(response, 200, profileTab(bot, line));
@@ -568,7 +576,7 @@ async function renderTab(
 
   // 봇의 칸은 **이어진 뒤에만** 선다 — 그 전에는 시에라를 부를 수 없다.
   const panel = options.panel !== undefined && isConnected(bot)
-    ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id)
+    ? renderPanel(await options.panel.describe(bot, options.fleet.contextOf(bot)), bot.id, subTab)
     : '';
 
   send(response, 200, featuresTab(bot, panel, line));
@@ -655,9 +663,20 @@ function cleanOrigin(raw: string): string | undefined {
  *
  * 폼을 낸 탭이 아니라 첫 장으로 떨어지면 사람이 *저장이 됐나*를 두 번 확인하게 된다.
  */
-function back(response: ServerResponse, botId: string, tab: BotTab, line?: string): void {
+function back(response: ServerResponse, botId: string, tab: BotTab, line?: string, subTab?: string): void {
   const at = `/bots/${botId}${tab === 'profile' ? '' : `/${tab}`}`;
-  redirect(response, line === undefined ? at : `${at}?said=${encodeURIComponent(line)}`);
+  const query = new URLSearchParams();
+  if (subTab !== undefined) {
+    query.set('sub', subTab);
+  }
+  if (line !== undefined) {
+    query.set('said', line);
+  }
+  redirect(response, query.size === 0 ? at : `${at}?${query.toString()}`);
+}
+
+function subQuery(subTab: string | undefined): string {
+  return subTab === undefined ? '' : `?sub=${encodeURIComponent(subTab)}`;
 }
 
 function cookie(request: IncomingMessage): string | undefined {
