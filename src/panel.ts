@@ -13,8 +13,16 @@ import type { BotRecord } from './state.js';
  * > 요청 비용과 결과에 통일성이 있어야 하고, 이유 없이 다르게 동작해서는 안 된다.
  */
 
-/** 고쳐 쓰는 칸 하나. `name`은 폼의 이름이자 저장될 때의 열쇠다. */
-export type BotField =
+/**
+ * 고쳐 쓰는 칸 하나. `name`은 폼의 이름이자 저장될 때의 열쇠다.
+ *
+ * **`group`이 같은 칸은 이어 서면 한 묶음이다**(제목이 선 `<fieldset>`) — 한 봇이 기능을
+ * 여럿 질 때 *어느 칸이 어느 기능의 것인가*를 보인다(2026-10-06 요구). 폼은 여전히 하나라
+ * 저장은 한 번이다.
+ */
+export type BotField = FieldShape & { readonly group?: string };
+
+type FieldShape =
   | {
       readonly type: 'number';
       readonly name: string;
@@ -48,6 +56,23 @@ export type BotField =
       /** 보이는 줄 수 — 기본 4. */
       readonly rows?: number;
       readonly maxLength?: number;
+      readonly placeholder?: string;
+      readonly note?: string;
+    }
+  | {
+      /**
+       * **토큰 칸** — 낱말 여럿을 받는다(해시태그 따위, 2026-10-06 요구).
+       *
+       * **스크립트 없이 선다**(봇 화면에는 스크립트가 하나도 없다). 칸 하나에 빈칸·쉼표로
+       * 늘어놓고, 저장된 값은 칸 위에 **토큰으로 그려** 무엇이 낱낱으로 읽혔는지 보인다.
+       * 가르는 것도 라이브러리가 한다(`readTokens`) — 봇마다 가르면 규약이 갈린다.
+       */
+      readonly type: 'tokens';
+      readonly name: string;
+      readonly label: string;
+      readonly value: readonly string[];
+      /** 토큰 앞에 그릴 표시 — `#`. 값에는 들지 않는다. */
+      readonly prefix?: string;
       readonly placeholder?: string;
       readonly note?: string;
     }
@@ -118,8 +143,36 @@ function esc(value: string): string {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * 토큰 칸의 값을 가른다 — **빈칸·쉼표·줄바꿈**, 빈 것은 버리고 겹치면 하나만. 앞의 `#`도 뗀다.
+ * 접는 일(대소문자 따위)은 봇의 몫이다 — 무엇을 같은 것으로 볼지는 그 값의 뜻이 정한다.
+ */
+export function readTokens(raw: string | null | undefined): readonly string[] {
+  const found: string[] = [];
+
+  for (const one of (raw ?? '').split(/[\s,]+/u)) {
+    const token = one.replace(/^#+/, '').trim();
+    if (token !== '' && !found.includes(token)) {
+      found.push(token);
+    }
+  }
+
+  return found;
+}
+
 function field(one: BotField): string {
   const note = one.note === undefined ? '' : `<small>${esc(one.note)}</small>`;
+
+  if (one.type === 'tokens') {
+    const prefix = one.prefix ?? '';
+    const chips = one.value.length === 0
+      ? ''
+      : `<span class="tokens">${one.value.map((token) => `<span class="token">${esc(prefix + token)}</span>`).join('')}</span>`;
+
+    return `<p><label>${esc(one.label)}${chips}
+      <input name="${esc(one.name)}" value="${esc(one.value.join(' '))}"${
+        one.placeholder === undefined ? '' : ` placeholder="${esc(one.placeholder)}"`}></label>${note}</p>`;
+  }
 
   if (one.type === 'choice') {
     const options = one.options.map((o) =>
@@ -153,6 +206,26 @@ function field(one: BotField): string {
       one.maxLength === undefined ? '' : ` maxlength="${one.maxLength}"`}></label>${note}</p>`;
 }
 
+/** 이어 선 같은 `group`을 한 `<fieldset>`으로 — 묶음이 없는 칸은 그대로 선다. */
+function grouped(fields: readonly BotField[]): string {
+  let html = '';
+  let at = 0;
+
+  while (at < fields.length) {
+    const group = fields[at]?.group;
+    let end = at;
+    while (end < fields.length && fields[end]?.group === group) {
+      end += 1;
+    }
+
+    const inner = fields.slice(at, end).map(field).join('');
+    html += group === undefined ? inner : `<fieldset><legend>${esc(group)}</legend>${inner}</fieldset>`;
+    at = end;
+  }
+
+  return html;
+}
+
 /**
  * 칸을 그린다 — **폼의 주소는 라이브러리가 쥔다**(`x/settings` · `x/{단추}`).
  *
@@ -165,7 +238,7 @@ export function renderPanel(view: PanelView, botId: string): string {
 
   const fields = (view.fields ?? []).length === 0 ? '' : `
     <form method="post" action="/bots/${botId}/x/settings">
-      ${(view.fields ?? []).map(field).join('')}
+      ${grouped(view.fields ?? [])}
       <p><button class="button" type="submit">저장한다</button></p>
     </form>`;
 

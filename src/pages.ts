@@ -39,6 +39,10 @@ export function page(title: string, body: string): string {
          font: 1rem/1.7 system-ui, sans-serif; color: #1a1a1a; background: #fff; }
   code { background: #f2f2f2; padding: .1rem .3rem; border-radius: .2rem; word-break: break-all; }
   input, select, textarea { width: 100%; padding: .4rem; font: inherit; }
+  fieldset { border: 1px solid #ddd; border-radius: .3rem; margin: 1rem 0; padding: .2rem 1rem .6rem; }
+  legend { font-weight: 600; padding: 0 .3rem; }
+  .tokens { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0; }
+  .token { background: #f2f2f2; border: 1px solid #ddd; border-radius: 1rem; padding: 0 .6rem; font-size: .9rem; }
   label { display: block; }
   small { display: block; color: #666; margin-top: .2rem; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 1rem 0; }

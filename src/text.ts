@@ -66,3 +66,48 @@ export function postIdOf(href: string | null | undefined): string | undefined {
 
   return /\/([0-9a-fA-F-]{36})\/?$/.exec(href)?.[1];
 }
+
+/**
+ * **태그의 열쇠** — 코어의 `HashtagSyntax.Key`와 `TagKey.Of`를 옮겨 온 것이다(2026-10-06 요구).
+ *
+ * NFKC → 앞뒤 공백을 떼고 → 소문자 → 공백은 `_`. **글자가 하나도 없으면 태그가 아니다**
+ * (`#1`·`#2026`은 순번이나 연도다), 139자를 넘어도 아니다.
+ *
+ * **코어와 같아야 한다.** 봇이 다르게 접으면 운영자가 적은 태그가 사람이 단 태그와 **영원히
+ * 안 맞는다** — 그리고 아무도 그 사실을 알리지 않는다. 코어가 이 규칙을 바꾸면 여기도 바꾼다.
+ */
+export function tagKey(display: string): string | undefined {
+  const trimmed = display.trim().replace(/^#+/, '');
+  if (!/\p{L}/u.test(trimmed)) {
+    return undefined;
+  }
+
+  const key = trimmed.normalize('NFKC').trim().toLowerCase().replace(/\s+/gu, '_');
+
+  return key.length === 0 || key.length > TAG_MAX ? undefined : key;
+}
+
+const TAG_MAX = 139;
+
+/**
+ * 본문의 태그 — **열쇠로, 겹치지 않게, 나온 차례로**. 코어의 `HashtagSyntax.Pattern`이다.
+ *
+ * 앞에 단어 글자·`/`·`#`이 붙으면 태그가 아니다(`a#b` · 주소의 조각), 뒤도 같다.
+ */
+export function hashtags(body: string | null | undefined): readonly string[] {
+  if (body === null || body === undefined || body === '') {
+    return [];
+  }
+
+  const found: string[] = [];
+  const pattern = /(?<![\p{L}\p{M}\p{N}\p{Pc}/#])#([\p{L}\p{N}_]{1,139})(?![\p{L}\p{M}\p{N}\p{Pc}#])/gu;
+
+  for (const match of body.matchAll(pattern)) {
+    const key = tagKey(match[1] ?? '');
+    if (key !== undefined && !found.includes(key)) {
+      found.push(key);
+    }
+  }
+
+  return found;
+}
