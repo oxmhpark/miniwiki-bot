@@ -36,3 +36,18 @@ describe('토큰 칸과 묶음', () => {
     expect(html.indexOf('</fieldset>')).toBeLessThan(html.indexOf('name="n"'));
   });
 });
+
+describe('비밀 칸', () => {
+  it('값을 싣지 않고, 맡긴 것이 있으면 그 사실만 말한다', () => {
+    const html = renderPanel({
+      fields: [
+        { type: 'secret', name: 's1', label: '토큰', hint: 'github_pat_…', filled: true },
+        { type: 'secret', name: 's2', label: '토큰' },
+      ],
+    }, 'b1');
+
+    expect(html).toContain('<input type="password" name="s1" autocomplete="off" placeholder="github_pat_…">');
+    expect(html).not.toContain('value=');
+    expect(html.match(/이미 맡긴 것이 있습니다/g)).toHaveLength(1);
+  });
+});

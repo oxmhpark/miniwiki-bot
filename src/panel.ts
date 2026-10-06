@@ -83,6 +83,21 @@ type FieldShape =
       readonly value: string;
       readonly options: readonly { readonly value: string; readonly label: string }[];
       readonly note?: string;
+    }
+  | {
+      /**
+       * **비밀 칸** — 봇 임자가 맡기는 열쇠(저장소 토큰 따위, 2026-10-06 요구).
+       *
+       * 맡기는 칸(`IntakeField`의 `secret`)과 같은 규약이다: **적은 것이 화면으로 돌아오지
+       * 않고**, 이미 맡긴 것이 있으면 `filled`로 그 사실만 말하며, **빈 채로 내면 그대로 둔다**.
+       * 봉하는 일은 봇의 몫이다(`ctx.sealer`).
+       */
+      readonly type: 'secret';
+      readonly name: string;
+      readonly label: string;
+      readonly hint?: string;
+      readonly filled?: boolean;
+      readonly note?: string;
     };
 
 /**
@@ -191,6 +206,15 @@ function field(one: BotField): string {
     return `<p><label>${esc(one.label)}
       <input type="number" name="${esc(one.name)}" value="${one.value}"${bounds} required>
       </label>${one.unit === undefined ? '' : `<small>${esc(one.unit)}</small>`}${note}</p>`;
+  }
+
+  if (one.type === 'secret') {
+    // 값을 싣지 않는다 — 봉한 것이 화면으로 돌아오지 않게(`intake.ts`와 같은 까닭).
+    const filled = one.filled === true ? '<small>이미 맡긴 것이 있습니다 — 비워 두면 그대로 둡니다.</small>' : '';
+
+    return `<p><label>${esc(one.label)}
+      <input type="password" name="${esc(one.name)}" autocomplete="off"${
+        one.hint === undefined ? '' : ` placeholder="${esc(one.hint)}"`}></label>${filled}${note}</p>`;
   }
 
   if (one.type === 'lines') {

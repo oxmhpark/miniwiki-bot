@@ -286,7 +286,7 @@ const panel: BotPanel = {
 
 | 무엇 | 누가 |
 |---|---|
-| 칸의 갈래(`number`·`text`·`lines`·`tokens`·`choice`, 묶음은 `group`)와 값 | **봇** |
+| 칸의 갈래(`number`·`text`·`lines`·`tokens`·`choice`·`secret`, 묶음은 `group`. `secret`은 값이 화면으로 돌아오지 않고 비우면 그대로다 — 봉하는 것은 봇)와 값 | **봇** |
 | HTML · 이스케이프 · 폼 주소(`x/settings`·`x/{단추}`) | **라이브러리** |
 | **되돌릴 수 없는 단추를 가로줄 아래로 모으는 것**(`grave: true`) | **라이브러리** |
 | 저장·단추의 처리 | **봇**(`save`·`act`) |
