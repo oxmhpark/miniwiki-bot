@@ -76,7 +76,7 @@ export interface WebOptions {
   readonly commands?: readonly BotCommand[];
 
   /** 봇의 문 — 선언에 실어 코어가 거른다(코어 M61). 봇마다 다르다. */
-  readonly gates?: (bot: BotRecord) => Promise<BotGates | undefined>;
+  readonly gates?: (bot: BotRecord, store: FileStore) => Promise<BotGates | undefined>;
 
   /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
   readonly serviceName: string;
@@ -128,7 +128,7 @@ async function handle(
       return;
     }
 
-    const gates = await options.gates?.(bot);
+    const gates = await options.gates?.(bot, options.store);
     const body = JSON.stringify(
       manifestOf(bot, options.codeVersion, options.scopes, options.commands, gates), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);

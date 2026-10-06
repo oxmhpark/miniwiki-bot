@@ -53,7 +53,7 @@ export interface ServiceOptions {
    * 걸리지 않는 말의 문(`audience`). 선언에 실려 **코어가 거른다** — 그룹 밖 사람의 호출은 봇에
    * 닿지 않고 봇의 한도도 들지 않는다. 봇마다 설정이 다르므로 봇을 받아 짓는다.
    */
-  readonly gates?: (bot: BotRecord) => Promise<BotGates | undefined>;
+  readonly gates?: (bot: BotRecord, store: FileStore) => Promise<BotGates | undefined>;
 
   /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
   readonly panel?: BotPanel;
