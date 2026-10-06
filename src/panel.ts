@@ -63,9 +63,12 @@ type FieldShape =
       /**
        * **토큰 칸** — 낱말 여럿을 받는다(해시태그 따위, 2026-10-06 요구).
        *
-       * **스크립트 없이 선다**(봇 화면에는 스크립트가 하나도 없다). 칸 하나에 빈칸·쉼표로
-       * 늘어놓고, 저장된 값은 칸 위에 **토큰으로 그려** 무엇이 낱낱으로 읽혔는지 보인다.
-       * 가르는 것도 라이브러리가 한다(`readTokens`) — 봇마다 가르면 규약이 갈린다.
+       * **하멜의 칩 칸과 같이 선다**(2026-10-07 요구) — 적은 것은 상자로 서고 `×`로 빼며,
+       * 엔터·쉼표(여럿인 칸은 빈칸도)로 넣고 빈 칸의 지우기는 마지막 상자를 걷는다(`CHIPS`).
+       *
+       * **스크립트는 거들 뿐이다.** 마크업은 지금도 칸 하나에 빈칸·쉼표로 늘어놓는 칸이고, 저장된
+       * 값은 칸 위에 토큰으로 그려진다 — 스크립트가 죽어도 그대로 받는다. 가르는 것도
+       * 라이브러리가 한다(`readTokens`) — 봇마다 가르면 규약이 갈린다.
        */
       readonly type: 'tokens';
       readonly name: string;
@@ -73,6 +76,11 @@ type FieldShape =
       readonly value: readonly string[];
       /** 토큰 앞에 그릴 표시 — `#`. 값에는 들지 않는다. */
       readonly prefix?: string;
+      /**
+       * 받는 개수 — **1이면 값 하나의 칸이다**(그룹 따위). 새로 넣으면 옛것을 갈아 끼우고,
+       * 빈칸을 가르지 않아 이름에 빈칸이 들 수 있다. 받는 쪽은 그 칸을 한 줄 값으로 읽는다.
+       */
+      readonly max?: number;
       readonly placeholder?: string;
       readonly note?: string;
     }
@@ -185,7 +193,9 @@ function field(one: BotField): string {
       : `<span class="tokens">${one.value.map((token) => `<span class="token">${esc(prefix + token)}</span>`).join('')}</span>`;
 
     return `<p><label>${esc(one.label)}${chips}
-      <input name="${esc(one.name)}" value="${esc(one.value.join(' '))}"${
+      <input name="${esc(one.name)}" value="${esc(one.value.join(' '))}" data-chips${
+        prefix === '' ? '' : ` data-prefix="${esc(prefix)}"`}${
+        one.max === undefined ? '' : ` data-max="${one.max}"`}${
         one.placeholder === undefined ? '' : ` placeholder="${esc(one.placeholder)}"`}></label>${note}</p>`;
   }
 
@@ -251,6 +261,95 @@ function grouped(fields: readonly BotField[]): string {
 }
 
 /**
+ * **토큰 칸을 칩 칸으로 갈아입힌다** — 하멜의 `chips.ts`를 옮겼다(2026-10-07 요구).
+ *
+ * 원래 칸은 감춘 채 값을 쥐고(보내는 것은 여전히 그 칸이다), 그 앞에 상자들과 적는 칸이 선다.
+ *
+ * **레이블이 적는 칸을 가리키게 한다** — 레이블 안의 첫 번째 누를 수 있는 것은 상자의 `×`이고,
+ * 그대로 두면 칸의 이름을 누르는 것이 상자 하나를 지운다.
+ */
+const CHIPS = `<script>(() => {
+  for (const field of document.querySelectorAll('input[data-chips]')) {
+    const max = Number(field.dataset.max || 0);
+    const prefix = field.dataset.prefix || '';
+    const split = (raw) => max === 1
+      ? [raw.trim()].filter(Boolean)
+      : raw.split(/[\\s,]+/u).map((one) => one.replace(/^#+/, '').trim()).filter(Boolean);
+    let values = split(field.value);
+
+    const box = document.createElement('div');
+    const entry = document.createElement('input');
+    const label = field.closest('label');
+    box.className = 'chip-field';
+    entry.className = 'chip-entry';
+    entry.autocomplete = 'off';
+    entry.id = 'chip-' + field.name;
+    label?.querySelector('.tokens')?.remove();
+    label?.setAttribute('for', entry.id);
+
+    const write = (next) => {
+      values = next;
+      field.value = next.join(max === 1 ? '' : ' ');
+      draw();
+    };
+
+    const draw = () => {
+      box.querySelectorAll(':scope > .chip').forEach((old) => old.remove());
+      for (const value of values) {
+        const chip = document.createElement('span');
+        const drop = document.createElement('button');
+        chip.className = 'chip';
+        chip.textContent = prefix + value;
+        drop.type = 'button';
+        drop.className = 'chip-drop';
+        drop.textContent = '×';
+        drop.setAttribute('aria-label', prefix + value + ' 빼기');
+        drop.addEventListener('click', (event) => {
+          event.preventDefault();
+          write(values.filter((other) => other !== value));
+          entry.focus();
+        });
+        chip.append(drop);
+        entry.before(chip);
+      }
+      entry.placeholder = values.length === 0 ? field.placeholder : '';
+    };
+
+    const commit = () => {
+      const typed = split(entry.value);
+      entry.value = '';
+      if (typed.length === 0) return;
+      const next = [...values];
+      for (const one of typed) if (!next.includes(one)) next.push(one);
+      write(max > 0 ? next.slice(-max) : next);
+    };
+
+    entry.addEventListener('keydown', (event) => {
+      if (event.isComposing) return;
+      const breaks = event.key === 'Enter' || event.key === ',' || (max !== 1 && event.key === ' ');
+      if (breaks) {
+        // 엔터는 적는 것이 있을 때만 붙잡는다 — 비어 있으면 그대로 폼을 보낸다.
+        if (entry.value.trim() !== '') { event.preventDefault(); commit(); }
+        else if (event.key !== 'Enter') event.preventDefault();
+        return;
+      }
+      if (event.key === 'Backspace' && entry.value === '' && values.length > 0) {
+        event.preventDefault();
+        write(values.slice(0, -1));
+      }
+    });
+    entry.addEventListener('blur', commit);
+    field.form?.addEventListener('submit', commit, { capture: true });
+    box.addEventListener('click', (event) => { if (event.target === box) entry.focus(); });
+
+    box.append(entry);
+    field.hidden = true;
+    field.before(box);
+    draw();
+  }
+})();</script>`;
+
+/**
  * 칸을 그린다 — **폼의 주소는 라이브러리가 쥔다**(`x/settings` · `x/{단추}`).
  *
  * **되돌릴 수 없는 단추는 가로줄 아래에 모은다**(모체 `CLAUDE.md`의 펼침메뉴 규칙과 같은
@@ -264,7 +363,7 @@ export function renderPanel(view: PanelView, botId: string): string {
     <form method="post" action="/bots/${botId}/x/settings">
       ${grouped(view.fields ?? [])}
       <p><button class="button" type="submit">저장한다</button></p>
-    </form>`;
+    </form>${(view.fields ?? []).some((one) => one.type === 'tokens') ? CHIPS : ''}`;
 
   const buttons = view.actions ?? [];
   const draw = (one: BotAction): string => `

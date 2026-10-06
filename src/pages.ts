@@ -43,6 +43,20 @@ export function page(title: string, body: string): string {
   legend { font-weight: 600; padding: 0 .3rem; }
   .tokens { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0; }
   .token { background: #f2f2f2; border: 1px solid #ddd; border-radius: 1rem; padding: 0 .6rem; font-size: .9rem; }
+  /* **칩 칸** — 하멜의 \`.chip-field\`와 같은 모양(panel.ts의 CHIPS). 겉옷이 칸이고 안의 적는 칸은 테두리가 없다. */
+  .chip-field { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; box-sizing: border-box;
+                min-height: 2.4rem; padding: .25rem .4rem; border: 1px solid #767676; border-radius: .2rem;
+                background: #fff; cursor: text; }
+  .chip-field:focus-within { outline: 2px solid #1a1a1a; outline-offset: 1px; }
+  .chip-field .chip { display: inline-flex; align-items: center; gap: .25rem; background: #f2f2f2;
+                      border: 1px solid #ddd; border-radius: 1rem; padding: 0 .25rem 0 .6rem;
+                      font-size: .9rem; line-height: 1.6; }
+  .chip-field button.chip-drop { display: inline-flex; align-items: center; justify-content: center;
+                                 width: 1.1rem; height: 1.1rem; padding: 0; border: 0; border-radius: 50%;
+                                 background: #b5b5b5; color: #fff; font-size: .8rem; line-height: 1; }
+  .chip-field button.chip-drop:hover { background: #888; }
+  .chip-field input.chip-entry { flex: 1 1 6rem; min-width: 6rem; width: auto; border: 0; outline: 0;
+                                 padding: .15rem 0; background: none; color: inherit; }
   label { display: block; }
   small { display: block; color: #666; margin-top: .2rem; }
   dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem 1rem; margin: 1rem 0; }
@@ -96,6 +110,10 @@ export function page(title: string, body: string): string {
     body { color: #e8e8e8; background: #161616; }
     code { background: #2a2a2a; }
     .said { border-left-color: #e8e8e8; background: #2a2a2a; }
+    .token, .chip-field .chip { background: #2a2a2a; border-color: #444; }
+    .chip-field { background: #161616; border-color: #555; }
+    .chip-field:focus-within { outline-color: #e8e8e8; }
+    .chip-field button.chip-drop { background: #555; color: #e8e8e8; }
     .grave { border-top-color: #333; }
     small, dt { color: #9a9a9a; }
     .bots li { border-color: #333; }

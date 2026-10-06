@@ -51,3 +51,25 @@ describe('비밀 칸', () => {
     expect(html.match(/이미 맡긴 것이 있습니다/g)).toHaveLength(1);
   });
 });
+
+describe('칩 칸', () => {
+  it('토큰 칸에는 칩 스크립트가 붙고, 값 하나의 칸은 data-max를 진다', () => {
+    const html = renderPanel({
+      fields: [
+        { type: 'tokens', name: 't', label: '태그', value: ['a'], prefix: '#' },
+        { type: 'tokens', name: 'g', label: '그룹', value: ['두 낱말'], max: 1 },
+      ],
+    }, 'b1');
+
+    expect(html).toContain('name="t" value="a" data-chips data-prefix="#">');
+    expect(html).toContain('name="g" value="두 낱말" data-chips data-max="1">');
+
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? '';
+    expect(script).toContain('[\\s,]+');
+    expect(() => new Function(script)).not.toThrow();
+  });
+
+  it('토큰 칸이 없으면 스크립트도 없다', () => {
+    expect(renderPanel({ fields: [{ type: 'text', name: 'x', label: 'x', value: '' }] }, 'b1')).not.toContain('<script>');
+  });
+});
