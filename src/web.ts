@@ -6,7 +6,7 @@ import type { Sealer } from './crypto.js';
 import type { BotIntake, ConnectTicket } from './intake.js';
 import { renderIntake } from './intake.js';
 import type { BotCommand } from './commands.js';
-import { declarationChanged, manifestOf } from './manifest.js';
+import { declarationChanged, manifestOf, type BotGates } from './manifest.js';
 import type { BotTab } from './pages.js';
 import {
   advancedTab, authTab, deletePage, featuresTab, guestPage, homePage, landingPage, newBotPage,
@@ -75,6 +75,9 @@ export interface WebOptions {
   /** 이 봇이 알아듣는 명령 — 선언에 실린다. 없으면 그 칸이 빠진다(2026-09-29 요구). */
   readonly commands?: readonly BotCommand[];
 
+  /** 봇의 문 — 선언에 실어 코어가 거른다(코어 M61). 봇마다 다르다. */
+  readonly gates?: (bot: BotRecord) => Promise<BotGates | undefined>;
+
   /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
   readonly serviceName: string;
   /** 첫 화면의 본문 — 그 봇의 `ABOUT.md`를 그린 것. 없으면 빈 문자열이다. */
@@ -125,8 +128,9 @@ async function handle(
       return;
     }
 
+    const gates = await options.gates?.(bot);
     const body = JSON.stringify(
-      manifestOf(bot, options.codeVersion, options.scopes, options.commands), null, 2);
+      manifestOf(bot, options.codeVersion, options.scopes, options.commands, gates), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);
     return;
   }
@@ -255,6 +259,22 @@ async function handle(
       send(response, 400, stopPage('안 됐다',
         `<p>${escapeHtml((error as Error).message)}</p>`, `/bots/${bot.id}`));
       return;
+    }
+
+    /*
+     * **설정을 고쳤으면 코어가 선언을 다시 읽게 한다**(코어 M61 확정 4). 문구나 태그만 바뀌었으면
+     * 승인 없이 서고, 문의 그룹이 바뀌었으면 시에라 임자의 승인을 기다린다 — 그 사실을 함께 말한다.
+     * **못 불러도 저장은 섰다** — 봇이 붙지 않은 상태이거나 코어가 이 문을 모르는 판일 수 있다.
+     */
+    if (name === 'settings' && options.gates !== undefined && bot.sealedClientSecret !== undefined) {
+      try {
+        const refreshed = await ctx.sierra.refreshManifest();
+        if (!refreshed.applied) {
+          line = `${line ?? '저장했다'} — 문의 그룹이 바뀌어 시에라 임자의 새 판 승인을 기다린다`;
+        }
+      } catch (error) {
+        options.log(`[${bot.handle ?? bot.id}] 선언을 다시 읽히지 못했다: ${(error as Error).message}`);
+      }
     }
 
     // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.

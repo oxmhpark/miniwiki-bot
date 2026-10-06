@@ -33,7 +33,9 @@ export interface ManifestView {
    * `[]`를 받으면 지운다 — 명령을 들이지 않는 봇이 <b>남의 판에서 담긴 것을 지우는</b>
    * 일이 없어야 한다.
    */
-  readonly commands?: readonly BotCommand[];
+  readonly commands?: readonly (BotCommand & { readonly groups?: readonly string[]; readonly denied?: string })[];
+  readonly tags?: BotGates['tags'];
+  readonly audience?: BotGates['audience'];
 }
 
 /**
@@ -43,8 +45,52 @@ export interface ManifestView {
  * 고쳐도 시에라가 모르고, 설정판만 실으면 이 프로그램이 스코프를 늘려도 승인이 뜨지 않는다 —
  * **둘 다 오를 자리가 있어야 한다.**
  */
-export function version(codeVersion: string, settingsVersion: number): string {
-  return `${codeVersion}+${settingsVersion}`;
+/**
+ * **봇의 문** — 선언에 실어 코어가 거르게 하는 것(코어 M61, 2026-10-06 요구).
+ *
+ * 명령은 이름으로 짝지어 `groups`·`denied`가 붙고, 태그와 `audience`는 선언에 그대로 선다.
+ * **그룹은 하나라도 속하면 지나고, 비면 열려 있다.** 문구는 그룹 밖 사람에게 코어가 보낸다.
+ */
+export interface BotGates {
+  readonly commands?: Readonly<Record<string, { readonly groups?: readonly string[]; readonly denied?: string }>>;
+  readonly tags?: readonly {
+    readonly name: string;
+    readonly summary?: string;
+    readonly groups?: readonly string[];
+    readonly denied?: string;
+  }[];
+  readonly audience?: { readonly groups?: readonly string[]; readonly denied?: string };
+}
+
+/** 문이 적은 그룹 전부 — 정렬해서. */
+export function gateGroups(gates: BotGates | undefined): readonly string[] {
+  const all = new Set<string>();
+  Object.values(gates?.commands ?? {}).forEach((one) => (one.groups ?? []).forEach((name) => all.add(name)));
+  (gates?.tags ?? []).forEach((one) => (one.groups ?? []).forEach((name) => all.add(name)));
+  (gates?.audience?.groups ?? []).forEach((name) => all.add(name));
+
+  return [...all].sort();
+}
+
+/**
+ * 선언의 판 — `{코드판}+{설정판}`, **문의 그룹이 있으면 그 지문을 덧붙인다**.
+ *
+ * **그룹이 바뀌면 판이 바뀌어 시에라에 새 판 승인이 뜬다** — 그룹은 권한이다(그 소속을 봇이 알게
+ * 된다). 문구나 태그 이름만 바뀌면 판이 그대로라 코어가 승인 없이 다시 읽는다(`refreshManifest`).
+ */
+export function version(codeVersion: string, settingsVersion: number, groups: readonly string[] = []): string {
+  if (groups.length === 0) {
+    return `${codeVersion}+${settingsVersion}`;
+  }
+
+  // FNV-1a 32비트 — 암호가 아니라 *바뀌었는가*만 잰다.
+  let hash = 0x811c9dc5;
+  for (const char of groups.join('\n')) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+
+  return `${codeVersion}+${settingsVersion}.g${hash.toString(16).padStart(8, '0')}`;
 }
 
 export function manifestOf(
@@ -52,9 +98,19 @@ export function manifestOf(
   codeVersion: string,
   scopes: readonly string[] = DEFAULT_SCOPES,
   commands?: readonly BotCommand[],
+  gates?: BotGates,
 ): ManifestView {
+  const declared = commands === undefined ? undefined : declare(commands).map((one) => {
+    const gate = gates?.commands?.[one.name];
+    return {
+      ...one,
+      ...((gate?.groups ?? []).length === 0 ? {} : { groups: [...(gate?.groups ?? [])] }),
+      ...(gate?.denied === undefined || gate.denied === '' ? {} : { denied: gate.denied }),
+    };
+  });
+
   return {
-    version: version(codeVersion, bot.settingsVersion),
+    version: version(codeVersion, bot.settingsVersion, gateGroups(gates)),
     name: bot.declaration.name,
     summary: bot.declaration.summary,
     ...(bot.declaration.avatar === undefined ? {} : { avatar: bot.declaration.avatar }),
@@ -66,7 +122,9 @@ export function manifestOf(
      * 봇 서버에서 먼저 걸린다</b>: 코어의 거절은 사람이 설치를 눌러야 보이고 그때는 이미
      * 늦다.
      */
-    ...(commands === undefined ? {} : { commands: declare(commands) }),
+    ...(declared === undefined ? {} : { commands: declared }),
+    ...((gates?.tags ?? []).length === 0 ? {} : { tags: gates?.tags }),
+    ...(gates?.audience === undefined || (gates.audience.groups ?? []).length === 0 ? {} : { audience: gates.audience }),
   };
 }
 

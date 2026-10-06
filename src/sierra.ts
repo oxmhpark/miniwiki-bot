@@ -230,6 +230,18 @@ export interface Sierra {
    * **없으면 없는 것으로 친다** — 시계를 못 되찾을 뿐 봇은 그대로 돈다.
    */
   lastPost(): Promise<number | undefined>;
+
+  /**
+   * **그 사람이 그 그룹들에 드는가** — 선언의 트리거에 적혀 **승인된 그룹에 한해** 답한다(코어 M61).
+   * 그룹마다 `true`/`false`, **없는 그룹은 `null`**. 프로필의 `groups`와 달리 뱃지를 끈 그룹도 답한다.
+   */
+  membership(accountId: string, groups: readonly string[]): Promise<Readonly<Record<string, boolean | null>>>;
+
+  /**
+   * **제 선언을 코어가 다시 읽게 한다** — 트리거의 그룹이 그대로면 승인 없이 선다(코어 M61 확정 4).
+   * 그룹이 바뀌었으면 `applied: false`, `reason: 'groups_changed'` — 시에라 임자의 승인을 기다린다.
+   */
+  refreshManifest(): Promise<{ readonly applied: boolean; readonly reason?: string | null }>;
 }
 
 interface TokenResponse {
@@ -341,6 +353,17 @@ export class SierraClient implements Sierra {
 
   async account(id: string): Promise<AccountProfile> {
     return await this.send<AccountProfile>('GET', `/api/v1/accounts/${encodeURIComponent(id)}`);
+  }
+
+  async membership(
+    accountId: string, groups: readonly string[],
+  ): Promise<Readonly<Record<string, boolean | null>>> {
+    const query = new URLSearchParams({ groups: groups.join(',') });
+    return await this.send('GET', `/api/v1/bots/me/membership/${encodeURIComponent(accountId)}?${query}`);
+  }
+
+  async refreshManifest(): Promise<{ readonly applied: boolean; readonly reason?: string | null }> {
+    return await this.send('POST', '/api/v1/bots/me/manifest');
   }
 
   async publish(

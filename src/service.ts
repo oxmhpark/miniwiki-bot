@@ -3,7 +3,7 @@ import type { BotCommand } from './commands.js';
 import { readConfig } from './config.js';
 import { Sealer } from './crypto.js';
 import type { BotIntake, ConnectTicket } from './intake.js';
-import { DEFAULT_SCOPES } from './manifest.js';
+import { DEFAULT_SCOPES, type BotGates } from './manifest.js';
 import type { BotPanel } from './panel.js';
 import type { BotBrain } from './runner.js';
 import { Fleet } from './runner.js';
@@ -47,6 +47,13 @@ export interface ServiceOptions {
    * 않는다. 명령을 들이지 않기로 한 봇이 남의 판에서 담긴 것을 지우면 안 된다.
    */
   readonly commands?: readonly BotCommand[];
+
+  /**
+   * **봇의 문**(코어 M61, 2026-10-06) — 명령마다·태그마다 필요한 그룹과 거절 문구, 그리고 트리거에
+   * 걸리지 않는 말의 문(`audience`). 선언에 실려 **코어가 거른다** — 그룹 밖 사람의 호출은 봇에
+   * 닿지 않고 봇의 한도도 들지 않는다. 봇마다 설정이 다르므로 봇을 받아 짓는다.
+   */
+  readonly gates?: (bot: BotRecord) => Promise<BotGates | undefined>;
 
   /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
   readonly panel?: BotPanel;
@@ -154,6 +161,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     maxBotsPerAccount: config.maxBotsPerAccount,
     scopes: options.scopes ?? DEFAULT_SCOPES,
     ...(options.commands === undefined ? {} : { commands: options.commands }),
+    ...(options.gates === undefined ? {} : { gates: options.gates }),
     serviceName: name,
     about: about === undefined ? '' : renderMarkdown(withoutTitle(about)),
     ...(options.panel === undefined ? {} : { panel: options.panel }),

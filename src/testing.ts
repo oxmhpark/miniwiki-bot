@@ -23,6 +23,8 @@ export function fakeSierra(given: Partial<Sierra> = {}): Sierra {
     uploadAsset: given.uploadAsset ?? unused('uploadAsset'),
     assetToMedia: given.assetToMedia ?? unused('assetToMedia'),
     lastPost: given.lastPost ?? unused('lastPost'),
+    membership: given.membership ?? unused('membership'),
+    refreshManifest: given.refreshManifest ?? unused('refreshManifest'),
   };
 }
 
