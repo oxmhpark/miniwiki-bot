@@ -129,6 +129,16 @@ export interface Sierra {
   /** `post.max_length` — 익명으로 열리는 `/api/v1/instance`에서. 없으면 20000. */
   maxPostLength(): Promise<number>;
 
+  /**
+   * **이 봇의 글이 연합에 닿는가** (2026-10-07) — 사이트 AND 봇 계정. 코어의 `FederationGate`와 같은
+   * 판정이고, 닿지 않으면 코어가 `federated`를 `server`로 낮춰 저장한다. 사이트 값은 `/instance`의
+   * 공개 설정, 계정 값은 `/settings/user`(`read:accounts`)다.
+   *
+   * **모르면 `undefined`다** — 옛 코어는 사이트 값을 내지 않고, 낮추지도 않는다. 그때 *닿지 않는다*고
+   * 답하면 연합하는 서버에서 봇이 연합을 스스로 끈다.
+   */
+  federates(): Promise<boolean | undefined>;
+
   /** `min_id` 뒤의 알림들. **코어는 최신 순으로 돌려준다** — 부르는 쪽이 뒤집어 처리한다. */
   notifications(minId: string | undefined): Promise<readonly Notification[]>;
 
@@ -294,6 +304,27 @@ export class SierraClient implements Sierra {
 
   async me(): Promise<AccountRef> {
     return await this.send<AccountRef>('GET', '/api/v1/accounts/verify_credentials');
+  }
+
+  async federates(): Promise<boolean | undefined> {
+    const response = await fetch(`${this.config.origin}/api/v1/instance`);
+    if (!response.ok) {
+      throw new SierraError(response.status, await response.text());
+    }
+
+    const instance = (await response.json()) as { readonly settings?: Readonly<Record<string, unknown>> };
+    const site = instance.settings?.['federation.enabled'];
+    if (typeof site !== 'boolean') {
+      return undefined;
+    }
+    if (!site) {
+      return false;
+    }
+
+    const mine = await this.send<Readonly<Record<string, { readonly value?: unknown } | undefined>>>(
+      'GET', '/api/v1/settings/user');
+
+    return mine['federation.enabled']?.value === true;
   }
 
   async maxPostLength(): Promise<number> {

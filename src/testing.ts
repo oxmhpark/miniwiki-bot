@@ -11,6 +11,7 @@ export function fakeSierra(given: Partial<Sierra> = {}): Sierra {
   return {
     me: given.me ?? unused('me'),
     maxPostLength: given.maxPostLength ?? unused('maxPostLength'),
+    federates: given.federates ?? unused('federates'),
     notifications: given.notifications ?? unused('notifications'),
     context: given.context ?? unused('context'),
     reply: given.reply ?? unused('reply'),

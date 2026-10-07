@@ -175,3 +175,13 @@ describe('묶음마다 저장', () => {
     expect(filled.get('n')).toBe('3');
   });
 });
+
+describe('고를 수 없는 선택지', () => {
+  it('disabled면 보이되 꺼진다', () => {
+    const html = renderPanel({ fields: [{ type: 'choice', name: 'v', label: '공개 범위', value: 'server', options: [
+      { value: 'federated', label: '연합', disabled: true }, { value: 'server', label: '이 서버' },
+    ] }] }, 'b1');
+    expect(html).toContain('<option value="federated" disabled>연합</option>');
+    expect(html).toContain('<option value="server" selected>이 서버</option>');
+  });
+});

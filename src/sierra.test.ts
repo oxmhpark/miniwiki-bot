@@ -24,3 +24,38 @@ describe('uploadAsset', () => {
     expect(forms[1]?.getAll('tag')).toEqual(['하나']);
   });
 });
+
+describe('federates', () => {
+  function stub(site: unknown, user: unknown): string[] {
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      asked.push(new URL(url).pathname);
+      if (url.endsWith('/oauth/token')) {
+        return new Response(JSON.stringify({ access_token: 't', expires_in: 3600 }));
+      }
+      if (url.endsWith('/api/v1/instance')) {
+        return new Response(JSON.stringify({ settings: site === undefined ? {} : { 'federation.enabled': site } }));
+      }
+      return new Response(JSON.stringify({ 'federation.enabled': { value: user } }));
+    });
+    return asked;
+  }
+
+  const client = (): SierraClient => new SierraClient({ origin: 'https://s.test', clientId: 'c', clientSecret: 's' });
+
+  it('사이트 AND 봇 계정', async () => {
+    stub(true, true);
+    expect(await client().federates()).toBe(true);
+    stub(true, false);
+    expect(await client().federates()).toBe(false);
+  });
+
+  it('사이트가 끊었으면 계정을 묻지 않고 거짓, 사이트 값이 없으면(옛 코어) 모른다', async () => {
+    const off = stub(false, true);
+    expect(await client().federates()).toBe(false);
+    expect(off).toEqual(['/api/v1/instance']);
+
+    stub(undefined, true);
+    expect(await client().federates()).toBeUndefined();
+  });
+});

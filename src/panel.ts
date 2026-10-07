@@ -94,7 +94,8 @@ type FieldShape =
       readonly name: string;
       readonly label: string;
       readonly value: string;
-      readonly options: readonly { readonly value: string; readonly label: string }[];
+      /** `disabled`면 보이되 고를 수 없다 — 없는 것과 못 고르는 것은 다르다(2026-10-07). */
+      readonly options: readonly { readonly value: string; readonly label: string; readonly disabled?: boolean }[];
       readonly note?: string;
     }
   | {
@@ -270,7 +271,7 @@ function field(one: BotField): string {
 
   if (one.type === 'choice') {
     const options = one.options.map((o) =>
-      `<option value="${esc(o.value)}"${o.value === one.value ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+      `<option value="${esc(o.value)}"${o.value === one.value ? ' selected' : ''}${o.disabled === true ? ' disabled' : ''}>${esc(o.label)}</option>`).join('');
 
     return `<p><label>${esc(one.label)}
       <select name="${esc(one.name)}">${options}</select></label>${note}</p>`;
