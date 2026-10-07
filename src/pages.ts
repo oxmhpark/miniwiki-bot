@@ -90,6 +90,8 @@ export function page(title: string, body: string): string {
   .top h1 { margin: 0; font-size: 1.5rem; line-height: 1.3; }
   .top form { margin: 0; }
   .top .small-button, .top button { padding: .35rem .7rem; font-size: .9rem; }
+  .top .doors { display: flex; align-items: center; gap: .4rem; }
+  .top .doors a[aria-current] { font-weight: 600; }
   /* **주소가 탭이다** — 스크립트가 감추고 보이는 것이 아니라 네 장이 각자 선다. */
   .tabs { display: flex; flex-wrap: wrap; gap: .2rem; margin: 1rem 0 1.5rem;
           border-bottom: 1px solid #ddd; }
@@ -161,8 +163,17 @@ function top(title: string, right: string): string {
   return `<header class="top"><h1>${title}</h1>${right}</header>`;
 }
 
-/** 나가는 단추 — 로그인한 사람의 제목줄 오른쪽은 늘 이것이다. */
-const LEAVE = '<form method="post" action="/auth/logout"><button type="submit">나가기</button></form>';
+/**
+ * **드나드는 단추 둘** — 로그인한 사람의 제목줄 오른쪽은 늘 이것이다: *내 봇들*과 *나가기*가
+ * 나란히(2026-10-07 요구). ~~내 봇들은 화면마다 본문 끝에 섰다~~ — 자리가 화면마다 달라 매번
+ * 찾아야 했다.
+ *
+ * @param here 지금 *내 봇들*에 있는가 — 그 단추가 지금 자리임을 말한다.
+ */
+function leave(here = false): string {
+  return `<nav class="doors"><a class="button plain small-button" href="/bots"${here ? ' aria-current="page"' : ''}>내 봇들</a>
+    <form method="post" action="/auth/logout"><button type="submit">나가기</button></form></nav>`;
+}
 
 /** 들어오는 단추 — 아직 누구인지 모르는 사람의 자리. */
 const ENTER = '<a class="button small-button" href="/auth/github">GitHub으로 들어가기</a>';
@@ -202,10 +213,8 @@ function who(service: string, account?: AccountRecord): string {
  */
 export function landingPage(service: string, about: string, account?: AccountRecord): string {
   return page(escapeHtml(service), `
-    ${top(who(service, account), account === undefined ? ENTER : LEAVE)}
-    ${account === undefined
-      ? '<p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>'
-      : '<p><a class="button" href="/bots">내 봇들</a></p>'}
+    ${top(who(service, account), account === undefined ? ENTER : leave())}
+    ${account === undefined ? '<p>시에라에 붙는 봇을 만들고 잇는 자리입니다.</p>' : ''}
     ${about === '' ? '' : `<div class="doc">${about}</div>`}`);
 }
 
@@ -227,7 +236,7 @@ export function homePage(
       </li>`).join('')}</ul>`;
 
   return page(who(service, account), `
-    ${top(who(service, account), LEAVE)}
+    ${top(who(service, account), leave(true))}
     ${said(line)}
     ${rows}
     <p>${bots.length < max
@@ -241,7 +250,7 @@ export function newBotPage(
   fields: { name?: string; summary?: string; origin?: string } = {}, wrong?: string,
 ): string {
   return page('봇 만들기', `
-    ${top('봇 만들기', LEAVE)}
+    ${top('봇 만들기', leave())}
     ${said(wrong)}
     <form method="post" action="/bots">
       <p><label>이름 <input name="name" required maxlength="60"
@@ -261,10 +270,10 @@ export function newBotPage(
 /** 한도에 닿았다 — 만들기 자리가 *왜 없는지* 말하는 한 장. */
 export function noRoomPage(max: number): string {
   return page('한도', `
-    ${top('한도', LEAVE)}
+    ${top('한도', leave())}
     <p>봇은 ${max}개까지입니다. 시에라 쪽 한도(<code>bot.max_per_user</code>)에 맞춘 수라,
        늘리려면 그 시에라의 관리자가 먼저 늘려야 합니다.</p>
-    <p><a class="button plain" href="/bots">내 봇들</a></p>`);
+`);
 }
 
 /** 봇 하나의 화면 넷 — **주소가 탭이다**. */
@@ -289,15 +298,14 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     .join('');
 
   return page(escapeHtml(bot.declaration.name), `
-    ${top(escapeHtml(bot.declaration.name), LEAVE)}
+    ${top(escapeHtml(bot.declaration.name), leave())}
     <p>${statusOf(bot)}${bot.handle === undefined ? ''
       : ` · <code>@${escapeHtml(bot.handle)}</code>`} · ${escapeHtml(bot.origin)}</p>
     <nav class="tabs">${nav}</nav>
     ${said(line)}
     ${isConnected(bot) || current === 'auth' ? '' : `
       <p class="said">아직 잇지 않았습니다 — <a href="/bots/${bot.id}/auth">인증</a>에서 잇습니다.</p>`}
-    ${body}
-    <p class="grave"><a class="button plain" href="/bots">내 봇들</a></p>`);
+    ${body}`);
 }
 
 /**
@@ -428,7 +436,7 @@ export function advancedTab(bot: BotRecord, line?: string): string {
  */
 export function deletePage(bot: BotRecord): string {
   return page('지울까', `
-    ${top('지울까', LEAVE)}
+    ${top('지울까', leave())}
     <p><b>${escapeHtml(bot.declaration.name)}</b>${bot.handle === undefined ? ''
       : ` (<code>@${escapeHtml(bot.handle)}</code>)`} — ${escapeHtml(bot.origin)}</p>
     <h2>여기서 사라지는 것</h2>
@@ -470,7 +478,7 @@ export function guestPage(botName: string, title: string, body: string, line?: s
 /** 막힌 자리 — 어디로 돌아갈지가 늘 함께 선다. */
 export function stopPage(title: string, body: string, back: string, word = '돌아가기'): string {
   return page(title, `
-    ${top(title, LEAVE)}
+    ${top(title, leave())}
     ${body}
     <p><a class="button plain" href="${back}">${word}</a></p>`);
 }
