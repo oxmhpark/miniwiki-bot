@@ -18,3 +18,15 @@ describe('제목줄의 드나드는 단추', () => {
     expect(homePage('채토', account, [], 3)).toContain('href="/bots" aria-current="page">내 봇들');
   });
 });
+
+describe('덮개 스크립트', () => {
+  it('폼과 링크를 함께 덮고, 문법이 맞다', () => {
+    const html = landingPage('채토', '', account);
+    const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+
+    expect(script).toContain("addEventListener('submit'");
+    expect(script).toContain("addEventListener('click'");
+    expect(script).toContain('여는 중…');
+    expect(() => new Function(script)).not.toThrow();
+  });
+});

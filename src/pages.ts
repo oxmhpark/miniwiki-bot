@@ -32,16 +32,33 @@ import { escapeHtml } from './text.js';
  * **보내면 덮는다**(2026-10-07 요구 — 하멜처럼). 폼을 보내는 순간 화면을 얇게 덮고 가운데에
  * 문구를 띄운다 — 문구는 폼의 `data-wait`, 없으면 *처리하는 중…*. 화면 전체가 다시 그려지므로
  * 걷는 일은 없다. **뒤로 가기로 돌아온 장**(bfcache)에는 덮개가 남아 있으므로 그때 걷는다.
+ *
+ * **링크로 옮기는 것도 덮는다**(2026-10-08 — 공용 규칙: 화면 전환을 포함한 모든 비동기 액션).
+ * 이 화면이 그대로 남는 누름은 덮지 않는다 — 새 탭(보조 키 · 가운데 단추 · `target`), 내려받기,
+ * 같은 장 안의 `#`, 남의 오리진.
  */
 const WAIT = `<script>(() => {
-  document.addEventListener('submit', (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement) || event.defaultPrevented || form.method !== 'post') return;
+  const cover = (text) => {
+    if (document.querySelector('.veil')) return;
     const veil = document.createElement('p');
     veil.className = 'veil';
     veil.setAttribute('role', 'status');
-    veil.textContent = form.dataset.wait || '처리하는 중…';
+    veil.textContent = text;
     document.body.append(veil);
+  };
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || event.defaultPrevented || form.method !== 'post') return;
+    cover(form.dataset.wait || '처리하는 중…');
+  });
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!link || link.target || link.hasAttribute('download')) return;
+    const to = new URL(link.href, location.href);
+    if (to.origin !== location.origin) return;
+    if (to.pathname === location.pathname && to.search === location.search && to.hash !== '') return;
+    cover(link.dataset.wait || '여는 중…');
   });
   window.addEventListener('pageshow', () => document.querySelectorAll('.veil').forEach((one) => one.remove()));
 })();</script>`;
