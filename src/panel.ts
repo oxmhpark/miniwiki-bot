@@ -81,6 +81,11 @@ type FieldShape =
        * 빈칸을 가르지 않아 이름에 빈칸이 들 수 있다. 받는 쪽은 그 칸을 한 줄 값으로 읽는다.
        */
       readonly max?: number;
+      /**
+       * **쉼표로만 가른다**(`comma`) — 이름에 빈칸이 들 수 있는 값(그룹 따위, 2026-10-07). 기본은
+       * 빈칸·쉼표로 가른다(태그). 받는 쪽은 `readNames`로 읽는다.
+       */
+      readonly separator?: 'comma';
       readonly placeholder?: string;
       readonly note?: string;
     }
@@ -221,6 +226,11 @@ function esc(value: string): string {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** 쉼표로 가른 칸의 값 — 앞뒤 공백만 떼고, 빈 것은 버리고, 겹치면 하나만(`separator: 'comma'`). */
+export function readNames(raw: string | null | undefined): readonly string[] {
+  return [...new Set((raw ?? '').split(/[,\n]/u).map((one) => one.trim()).filter((one) => one !== ''))];
+}
+
 /**
  * 토큰 칸의 값을 가른다 — **빈칸·쉼표·줄바꿈**, 빈 것은 버리고 겹치면 하나만. 앞의 `#`도 뗀다.
  * 접는 일(대소문자 따위)은 봇의 몫이다 — 무엇을 같은 것으로 볼지는 그 값의 뜻이 정한다.
@@ -248,9 +258,10 @@ function field(one: BotField): string {
       : `<span class="tokens">${one.value.map((token) => `<span class="token">${esc(prefix + token)}</span>`).join('')}</span>`;
 
     return `<p><label>${esc(one.label)}${chips}
-      <input name="${esc(one.name)}" value="${esc(one.value.join(' '))}" data-chips${
+      <input name="${esc(one.name)}" value="${esc(one.value.join(one.separator === 'comma' ? ', ' : ' '))}" data-chips${
         prefix === '' ? '' : ` data-prefix="${esc(prefix)}"`}${
         one.max === undefined ? '' : ` data-max="${one.max}"`}${
+        one.separator === undefined ? '' : ` data-sep="${one.separator}"`}${
         one.placeholder === undefined ? '' : ` placeholder="${esc(one.placeholder)}"`}></label>${note}</p>`;
   }
 
@@ -327,9 +338,12 @@ const CHIPS = `<script>(() => {
   for (const field of document.querySelectorAll('input[data-chips]')) {
     const max = Number(field.dataset.max || 0);
     const prefix = field.dataset.prefix || '';
+    const comma = field.dataset.sep === 'comma';
     const split = (raw) => max === 1
       ? [raw.trim()].filter(Boolean)
-      : raw.split(/[\\s,]+/u).map((one) => one.replace(/^#+/, '').trim()).filter(Boolean);
+      : comma
+        ? raw.split(',').map((one) => one.trim()).filter(Boolean)
+        : raw.split(/[\\s,]+/u).map((one) => one.replace(/^#+/, '').trim()).filter(Boolean);
     let values = split(field.value);
 
     const box = document.createElement('div');
@@ -344,7 +358,7 @@ const CHIPS = `<script>(() => {
 
     const write = (next) => {
       values = next;
-      field.value = next.join(max === 1 ? '' : ' ');
+      field.value = next.join(max === 1 ? '' : comma ? ', ' : ' ');
       draw();
     };
 
@@ -381,7 +395,7 @@ const CHIPS = `<script>(() => {
 
     entry.addEventListener('keydown', (event) => {
       if (event.isComposing) return;
-      const breaks = event.key === 'Enter' || event.key === ',' || (max !== 1 && event.key === ' ');
+      const breaks = event.key === 'Enter' || event.key === ',' || (max !== 1 && !comma && event.key === ' ');
       if (breaks) {
         // 엔터는 적는 것이 있을 때만 붙잡는다 — 비어 있으면 그대로 폼을 보낸다.
         if (entry.value.trim() !== '') { event.preventDefault(); commit(); }
@@ -509,7 +523,7 @@ export function fillHidden(view: PanelView, form: URLSearchParams): URLSearchPar
     if (filled.has(one.name) || one.type === 'secret') {
       continue;
     }
-    filled.set(one.name, one.type === 'tokens' ? one.value.join(' ') : String(one.value));
+    filled.set(one.name, one.type === 'tokens' ? one.value.join(one.separator === 'comma' ? ', ' : ' ') : String(one.value));
   }
 
   return filled;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillHidden, readTokens, renderPanel } from './panel.js';
+import { fillHidden, readNames, readTokens, renderPanel } from './panel.js';
 
 describe('renderPanel', () => {
   it('여러 줄 칸은 textarea로 서고 값을 이스케이프한다', () => {
@@ -135,5 +135,16 @@ describe('서브탭', () => {
     expect(filled.get('m')).toBe('x');
     expect(filled.get('postTags')).toBe('a b');
     expect(filled.has('s')).toBe(false);
+  });
+});
+
+describe('쉼표로 가르는 칩 칸', () => {
+  it('readNames는 쉼표로만 가르고 이름 안의 빈칸을 둔다', () => {
+    expect(readNames(' 편집 모임, 독자 ,, 편집 모임\n관리')).toEqual(['편집 모임', '독자', '관리']);
+  });
+
+  it('값을 쉼표로 이어 싣고 data-sep을 진다', () => {
+    const html = renderPanel({ fields: [{ type: 'tokens', name: 'g', label: '그룹', value: ['편집 모임', '독자'], separator: 'comma' }] }, 'b1');
+    expect(html).toContain('value="편집 모임, 독자" data-chips data-sep="comma">');
   });
 });
