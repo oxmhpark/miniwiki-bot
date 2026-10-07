@@ -252,11 +252,13 @@ async function handle(
     const form = await readForm(request);
     // **폼을 낸 장으로 돌아간다**(서브탭) — 첫 장으로 떨어지면 저장이 됐나를 다시 찾게 된다.
     const tabName = form.get('_tab') ?? undefined;
+    const anchor = form.get('_at') ?? undefined;
     let line: string | undefined;
 
     try {
       if (name === 'settings') {
-        const filled = tabName === undefined ? form : fillHidden(await options.panel.describe(bot, ctx), form);
+        // **폼에는 그 묶음의 칸만 온다** — 나머지는 지금 값으로 채운다(`panel.ts`의 `grouped`).
+        const filled = fillHidden(await options.panel.describe(bot, ctx), form);
         line = await options.panel.save?.(filled, bot, ctx);
       } else if (name === 'list') {
         // **목록의 폼** — 어느 목록의 어느 항목에 무엇을 하는가가 칸으로 온다(`panel.ts`의 `BotList`).
@@ -291,7 +293,7 @@ async function handle(
     }
 
     // **한 말은 한 번만 보인다** — 주소에 실어 보내고 새로고침에는 남지 않게 한다.
-    back(response, bot.id, 'features', line, tabName);
+    back(response, bot.id, 'features', line, tabName, anchor);
     return;
   }
 
@@ -663,7 +665,9 @@ function cleanOrigin(raw: string): string | undefined {
  *
  * 폼을 낸 탭이 아니라 첫 장으로 떨어지면 사람이 *저장이 됐나*를 두 번 확인하게 된다.
  */
-function back(response: ServerResponse, botId: string, tab: BotTab, line?: string, subTab?: string): void {
+function back(
+  response: ServerResponse, botId: string, tab: BotTab, line?: string, subTab?: string, anchor?: string,
+): void {
   const at = `/bots/${botId}${tab === 'profile' ? '' : `/${tab}`}`;
   const query = new URLSearchParams();
   if (subTab !== undefined) {
@@ -672,7 +676,9 @@ function back(response: ServerResponse, botId: string, tab: BotTab, line?: strin
   if (line !== undefined) {
     query.set('said', line);
   }
-  redirect(response, query.size === 0 ? at : `${at}?${query.toString()}`);
+  // **누른 자리로 돌아온다** — 장의 맨 위로 떨어지면 아래에서 누른 손이 제 자리를 다시 찾는다.
+  const hash = anchor !== undefined && /^[A-Za-z0-9_-]{1,80}$/.test(anchor) ? `#${anchor}` : '';
+  redirect(response, `${query.size === 0 ? at : `${at}?${query.toString()}`}${hash}`);
 }
 
 function subQuery(subTab: string | undefined): string {

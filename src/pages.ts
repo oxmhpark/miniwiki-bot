@@ -28,6 +28,24 @@ import { escapeHtml } from './text.js';
  * 오른쪽에 *드나드는 단추* 하나. 화면마다 자리를 달리하면 사람이 매번 다시 찾는다.
  */
 
+/**
+ * **보내면 덮는다**(2026-10-07 요구 — 하멜처럼). 폼을 보내는 순간 화면을 얇게 덮고 가운데에
+ * 문구를 띄운다 — 문구는 폼의 `data-wait`, 없으면 *처리하는 중…*. 화면 전체가 다시 그려지므로
+ * 걷는 일은 없다. **뒤로 가기로 돌아온 장**(bfcache)에는 덮개가 남아 있으므로 그때 걷는다.
+ */
+const WAIT = `<script>(() => {
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || event.defaultPrevented || form.method !== 'post') return;
+    const veil = document.createElement('p');
+    veil.className = 'veil';
+    veil.setAttribute('role', 'status');
+    veil.textContent = form.dataset.wait || '처리하는 중…';
+    document.body.append(veil);
+  });
+  window.addEventListener('pageshow', () => document.querySelectorAll('.veil').forEach((one) => one.remove()));
+})();</script>`;
+
 /** 옷은 한 벌뿐이다 — 봇의 페이지라 하멜 스킨 밖이다. */
 export function page(title: string, body: string): string {
   return `<!doctype html>
@@ -79,7 +97,23 @@ export function page(title: string, body: string): string {
   form button:not(.button) { background: #fff; color: #1a1a1a; }
   a.button.plain { background: #fff; color: #1a1a1a; }
   hr { border: 0; border-top: 1px solid #ddd; margin: 2rem 0; }
-  .said { padding: .6rem .8rem; border-left: 3px solid #1a1a1a; background: #f2f2f2; }
+  /* **남는 알림** — 읽고 나서도 그 자리에 있어야 하는 것(아직 잇지 않았다 · 입력이 틀렸다). */
+  .notice { padding: .6rem .8rem; border-left: 3px solid #1a1a1a; background: #f2f2f2; }
+  /*
+   * **결과는 떴다가 사라진다**(2026-10-07 요구) — ~~화면 맨 위의 줄~~은 아래에서 단추를 누른 손과
+   * 호응하지 않았다. 화면 한가운데에 고정해 뜨고 스스로 걷힌다 — 스크립트 없이 CSS만으로.
+   * 누름을 가로채지 않는다(pointer-events) — 떠 있는 동안에도 화면을 쓸 수 있다.
+   */
+  .said { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 50;
+          box-sizing: border-box; max-width: min(28rem, calc(100% - 2rem)); margin: 0;
+          padding: .8rem 1.2rem; border-radius: .4rem; background: #1a1a1a; color: #fff;
+          box-shadow: 0 .4rem 1.2rem rgb(0 0 0 / .25); pointer-events: none;
+          animation: said 2.8s ease forwards; }
+  @keyframes said { 0% { opacity: 0; } 8% { opacity: 1; } 72% { opacity: 1; }
+                    100% { opacity: 0; visibility: hidden; } }
+  /* **대기 덮개** — 하멜의 \`.saving-veil\`과 같은 모양(얇게 덮고 가운데에 문구). 보내는 순간 선다. */
+  .veil { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+          margin: 0; background-color: color-mix(in srgb, #fff 78%, transparent); backdrop-filter: blur(2px); }
   /* **되돌릴 수 없는 것은 가로줄 아래에 선다** — 누르면 공개 글이 나가는 자리다. */
   .grave { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
   /* **없애는 단추는 혼자 붉다** — 가로줄 아래의 다른 것들과도 무게가 다르다. */
@@ -127,7 +161,9 @@ export function page(title: string, body: string): string {
   @media (prefers-color-scheme: dark) {
     body { color: #e8e8e8; background: #161616; }
     code { background: #2a2a2a; }
-    .said { border-left-color: #e8e8e8; background: #2a2a2a; }
+    .notice { border-left-color: #e8e8e8; background: #2a2a2a; }
+    .said { background: #e8e8e8; color: #161616; }
+    .veil { background-color: color-mix(in srgb, #161616 78%, transparent); }
     .token, .chip-field .chip { background: #2a2a2a; border-color: #444; }
     .chip-field { background: #161616; border-color: #555; }
     .chip-field:focus-within { outline-color: #e8e8e8; }
@@ -150,7 +186,7 @@ export function page(title: string, body: string): string {
     .doc pre { background: #2a2a2a; }
     .doc blockquote { border-left-color: #333; color: #b8b8b8; }
   }
-</style></head><body>${body}</body></html>`;
+</style></head><body>${body}${WAIT}</body></html>`;
 }
 
 /**
@@ -178,9 +214,17 @@ function leave(here = false): string {
 /** 들어오는 단추 — 아직 누구인지 모르는 사람의 자리. */
 const ENTER = '<a class="button small-button" href="/auth/github">GitHub으로 들어가기</a>';
 
-/** 한 말은 한 번만 보인다 — 주소에 실려 와서 새로고침에는 남지 않는다. */
+/**
+ * 한 말은 한 번만 보인다 — 주소에 실려 와서 새로고침에는 남지 않는다. **떴다가 사라진다**(`.said`).
+ * `role="status"`라 보조 기술은 사라지기 전에 읽는다.
+ */
 function said(line: string | undefined): string {
-  return line === undefined ? '' : `<p class="said">${escapeHtml(line)}</p>`;
+  return line === undefined ? '' : `<p class="said" role="status">${escapeHtml(line)}</p>`;
+}
+
+/** 남는 알림 — 사라지면 안 되는 것(입력이 틀렸다 따위). */
+function notice(line: string | undefined): string {
+  return line === undefined ? '' : `<p class="notice">${escapeHtml(line)}</p>`;
 }
 
 /** 그 봇이 지금 무엇인가 — 목록과 설정 화면이 같은 말을 쓴다. */
@@ -251,7 +295,7 @@ export function newBotPage(
 ): string {
   return page('봇 만들기', `
     ${top('봇 만들기', leave())}
-    ${said(wrong)}
+    ${notice(wrong)}
     <form method="post" action="/bots">
       <p><label>이름 <input name="name" required maxlength="60"
         value="${escapeHtml(fields.name ?? '')}"></label>
@@ -304,7 +348,7 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     <nav class="tabs">${nav}</nav>
     ${said(line)}
     ${isConnected(bot) || current === 'auth' ? '' : `
-      <p class="said">아직 잇지 않았습니다 — <a href="/bots/${bot.id}/auth">인증</a>에서 잇습니다.</p>`}
+      <p class="notice">아직 잇지 않았습니다 — <a href="/bots/${bot.id}/auth">인증</a>에서 잇습니다.</p>`}
     ${body}`);
 }
 

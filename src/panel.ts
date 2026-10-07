@@ -130,6 +130,9 @@ export interface BotAction {
   readonly grave?: boolean;
 
   readonly note?: string;
+
+  /** 누른 뒤 덮개에 설 말 — `복제하는 중…`. 없으면 *처리하는 중…*. */
+  readonly wait?: string;
 }
 
 /**
@@ -306,10 +309,18 @@ function field(one: BotField): string {
       one.maxLength === undefined ? '' : ` maxlength="${one.maxLength}"`}></label>${note}</p>`;
 }
 
-/** 이어 선 같은 `group`을 한 `<fieldset>`으로 — 묶음이 없는 칸은 그대로 선다. */
-function grouped(fields: readonly BotField[]): string {
+/**
+ * **묶음마다 폼 하나, 저장 단추 하나**(2026-10-07 요구) — ~~칸 전부를 한 폼으로~~ 두면 장이 길어질
+ * 때 단추가 멀고, 무엇이 저장됐는지도 흐렸다. 이어 선 같은 `group`이 한 `<fieldset>`이자 한 폼이고,
+ * 묶음이 없는 칸들도 저마다 폼 하나다.
+ *
+ * 폼에는 그 묶음의 칸만 실리므로 **나머지는 라이브러리가 지금 값으로 채워** 봇에게 넘긴다
+ * (`fillHidden`). 저장한 뒤에는 **그 묶음으로 돌아온다**(`_at` → 주소의 `#`).
+ */
+function grouped(fields: readonly BotField[], botId: string, tab: string): string {
   let html = '';
   let at = 0;
+  let count = 0;
 
   while (at < fields.length) {
     const group = fields[at]?.group;
@@ -318,12 +329,22 @@ function grouped(fields: readonly BotField[]): string {
       end += 1;
     }
 
-    const inner = fields.slice(at, end).map(field).join('');
-    html += group === undefined ? inner : `<fieldset><legend>${esc(group)}</legend>${inner}</fieldset>`;
+    count += 1;
+    const id = `${tab === '' ? 'f' : `${tab}-f`}${String(count)}`;
+    const inner = `${fields.slice(at, end).map(field).join('')}
+      <p><button class="button" type="submit">저장한다</button></p>`;
+    html += `<form method="post" action="/bots/${botId}/x/settings" id="${esc(id)}" data-wait="저장하는 중…">${hiddenTab(tab)}
+      <input type="hidden" name="_at" value="${esc(id)}">
+      ${group === undefined ? inner : `<fieldset><legend>${esc(group)}</legend>${inner}</fieldset>`}</form>`;
     at = end;
   }
 
   return html;
+}
+
+/** 폼이 낸 장(서브탭) — 돌아올 자리. */
+function hiddenTab(tab: string): string {
+  return tab === '' ? '' : `<input type="hidden" name="_tab" value="${esc(tab)}">`;
 }
 
 /**
@@ -433,25 +454,27 @@ const FOLD = `<script>(() => {
   });
 })();</script>`;
 
-function listHtml(one: BotList, botId: string, at: string): string {
+function listHtml(one: BotList, botId: string, at: string, tab: string): string {
   const action = `/bots/${botId}/x/list`;
-  const hidden = (op: string, key: string): string => `${at}<input type="hidden" name="list" value="${esc(one.name)}">
+  const id = `${tab === '' ? '' : `${tab}-`}list-${one.name}`;
+  const hidden = (op: string, key: string): string => `${at}<input type="hidden" name="_at" value="${esc(id)}">
+      <input type="hidden" name="list" value="${esc(one.name)}">
       <input type="hidden" name="op" value="${op}"><input type="hidden" name="key" value="${esc(key)}">`;
 
   const items = one.items.map((item) => `<li><details>
       <summary>${esc(item.label)}${item.note === undefined ? '' : ` <small>${esc(item.note)}</small>`}</summary>
-      ${item.fields.length === 0 ? '' : `<form method="post" action="${action}">${hidden('edit', item.key)}
+      ${item.fields.length === 0 ? '' : `<form method="post" action="${action}" data-wait="저장하는 중…">${hidden('edit', item.key)}
         ${item.fields.map(field).join('')}
         <p><button class="button" type="submit">저장한다</button></p></form>`}
-      <form method="post" action="${action}" class="grave">${hidden('remove', item.key)}
+      <form method="post" action="${action}" class="grave" data-wait="빼는 중…">${hidden('remove', item.key)}
         <button class="danger" type="submit">빼기</button></form>
     </details></li>`).join('');
 
-  return `<fieldset class="list"><legend>${esc(one.label)}</legend>
+  return `<fieldset class="list" id="${esc(id)}"><legend>${esc(one.label)}</legend>
     ${one.note === undefined ? '' : `<small>${esc(one.note)}</small>`}
     ${items === '' ? '' : `<ul>${items}</ul>`}
     <details class="add"><summary class="button plain">${esc(one.add.label)}</summary>
-      <form method="post" action="${action}">${hidden('add', '')}
+      <form method="post" action="${action}" data-wait="더하는 중…">${hidden('add', '')}
         ${one.add.fields.map(field).join('')}
         <p><button class="button" type="submit">더한다</button></p></form>
     </details></fieldset>`;
@@ -480,17 +503,13 @@ export function renderPanel(view: PanelView, botId: string, sub?: string): strin
 
 /** 한 장 — 서브탭이 없으면 화면 전체, 있으면 고른 장. 폼마다 **돌아올 장**을 싣는다. */
 function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: string): string {
-  const at = tab === '' ? '' : `<input type="hidden" name="_tab" value="${esc(tab)}">`;
+  const at = hiddenTab(tab);
   const facts = (view.facts ?? []).length === 0 ? '' : `<dl>${
     (view.facts ?? []).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
 
-  const fields = (view.fields ?? []).length === 0 ? '' : `
-    <form method="post" action="/bots/${botId}/x/settings">${at}
-      ${grouped(view.fields ?? [])}
-      <p><button class="button" type="submit">저장한다</button></p>
-    </form>`;
+  const fields = grouped(view.fields ?? [], botId, tab);
 
-  const lists = (view.lists ?? []).map((one) => listHtml(one, botId, at)).join('');
+  const lists = (view.lists ?? []).map((one) => listHtml(one, botId, at, tab)).join('');
   const listed = lists === '' ? '' : `${lists}${FOLD}`;
   const chips = [...(view.fields ?? []), ...(view.lists ?? []).flatMap((one) => [
     ...one.add.fields, ...one.items.flatMap((item) => item.fields),
@@ -498,7 +517,9 @@ function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: str
 
   const buttons = view.actions ?? [];
   const draw = (one: BotAction): string => `
-    <form method="post" action="/bots/${botId}/x/${esc(one.name)}">${at}
+    <form method="post" action="/bots/${botId}/x/${esc(one.name)}" id="${esc(`${tab}-do-${one.name}`)}"${
+      one.wait === undefined ? '' : ` data-wait="${esc(one.wait)}"`}>${at}
+      <input type="hidden" name="_at" value="${esc(`${tab}-do-${one.name}`)}">
       <button type="submit">${esc(one.label)}</button>
       ${one.note === undefined ? '' : `<small>${esc(one.note)}</small>`}
     </form>`;
@@ -511,7 +532,7 @@ function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: str
 }
 
 /**
- * **보이지 않은 장의 칸을 지금 값으로 채운다** — 서브탭의 한 장에서 저장하면 폼에는 그 장의 칸만
+ * **폼에 없던 칸을 지금 값으로 채운다** — 묶음마다 폼이 따로라(`grouped`) 폼에는 그 묶음의 칸만
  * 온다. 봇의 `save`가 빠진 칸을 *비운 것*으로 읽지 않게 여기서 메운다.
  *
  * 비밀 칸은 채우지 않는다 — 값이 화면에 없고, 빈 비밀은 이미 *그대로 둔다*는 뜻이다.
@@ -519,7 +540,7 @@ function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: str
 export function fillHidden(view: PanelView, form: URLSearchParams): URLSearchParams {
   const filled = new URLSearchParams(form);
 
-  for (const one of (view.tabs ?? []).flatMap((tab) => tab.fields ?? [])) {
+  for (const one of [...(view.fields ?? []), ...(view.tabs ?? []).flatMap((tab) => tab.fields ?? [])]) {
     if (filled.has(one.name) || one.type === 'secret') {
       continue;
     }

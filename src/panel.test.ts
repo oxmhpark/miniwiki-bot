@@ -47,7 +47,7 @@ describe('비밀 칸', () => {
     }, 'b1');
 
     expect(html).toContain('<input type="password" name="s1" autocomplete="off" placeholder="github_pat_…">');
-    expect(html).not.toContain('value=');
+    expect(html).not.toMatch(/type="password"[^>]*value=/);
     expect(html.match(/이미 맡긴 것이 있습니다/g)).toHaveLength(1);
   });
 });
@@ -146,5 +146,32 @@ describe('쉼표로 가르는 칩 칸', () => {
   it('값을 쉼표로 이어 싣고 data-sep을 진다', () => {
     const html = renderPanel({ fields: [{ type: 'tokens', name: 'g', label: '그룹', value: ['편집 모임', '독자'], separator: 'comma' }] }, 'b1');
     expect(html).toContain('value="편집 모임, 독자" data-chips data-sep="comma">');
+  });
+});
+
+describe('묶음마다 저장', () => {
+  const html = renderPanel({
+    fields: [
+      { type: 'text', name: 'a', label: 'A', value: '', group: '하나' },
+      { type: 'text', name: 'b', label: 'B', value: '', group: '하나' },
+      { type: 'text', name: 'c', label: 'C', value: '', group: '둘' },
+      { type: 'number', name: 'n', label: 'N', value: 1 },
+    ],
+    actions: [{ name: 'go', label: '간다', wait: '가는 중…' }],
+  }, 'b1');
+
+  it('묶음마다 폼과 저장 단추가 서고, 돌아올 자리와 대기 문구를 진다', () => {
+    expect(html.match(/action="\/bots\/b1\/x\/settings"/g)).toHaveLength(3);
+    expect(html.match(/>저장한다</g)).toHaveLength(3);
+    expect(html).toContain('id="f1" data-wait="저장하는 중…"');
+    expect(html).toContain('<input type="hidden" name="_at" value="f2">');
+    expect(html).toContain('data-wait="가는 중…"');
+  });
+
+  it('폼에 없던 칸은 지금 값으로 채운다 — 서브탭이 없어도', () => {
+    const view = { fields: [{ type: 'text' as const, name: 'a', label: 'A', value: '옛값' }, { type: 'number' as const, name: 'n', label: 'N', value: 3 }] };
+    const filled = fillHidden(view, new URLSearchParams({ a: '새값' }));
+    expect(filled.get('a')).toBe('새값');
+    expect(filled.get('n')).toBe('3');
   });
 });
