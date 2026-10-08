@@ -208,10 +208,29 @@ export function page(title: string, body: string): string {
   .profile-card .pick-header.tipped::after { top: 3.1rem; right: .5rem; left: auto; margin: 0; }
   .profile-card .pick-avatar.tipped { display: inline-block; }
   .profile-card .pick-avatar.tipped::after { top: 50%; left: 100%; margin: 0 0 0 .5rem; transform: translateY(-50%); }
-  .bots { list-style: none; padding: 0; }
-  .bots li { border: 1px solid #ddd; border-radius: .3rem; padding: .8rem 1rem; margin: .6rem 0; }
-  .bots a { font-weight: 600; }
-  .bots small { margin-top: .3rem; }
+  /* **봇 목록은 프로필 카드의 나열이다**(2026-10-08) — 등록정보 카드와 같은 켜. 이름의 링크가 카드를 덮는다. */
+  .bots { list-style: none; padding: 0; display: grid; gap: 1rem; }
+  .bot-card { position: relative; margin: 0; border: 1px solid #ddd; border-radius: .5rem; overflow: hidden; }
+  .bot-card:hover { border-color: #999; }
+  .bot-card .card-header { position: relative; display: flow-root; min-height: 9rem; background: #e9e9e9; }
+  .bot-card .header { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .bot-card .avatar { position: relative; display: block; margin: .75rem; width: 6rem; height: 6rem; border-radius: 50%;
+                      object-fit: cover; background: #fff; }
+  .bot-card .avatar.fallback { display: flex; align-items: center; justify-content: center; color: #999; }
+  .bot-card .identity { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: baseline; gap: .5rem;
+                        padding: .25rem .75rem; background: rgb(0 0 0 / 55%); color: #fff; }
+  .bot-card .name { color: #fff; font-weight: 600; text-decoration: none; }
+  .bot-card .name::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+  .bot-card .handle { margin-left: auto; background: #fff; color: #a01b1b; }
+  .bot-card .card-body { padding: .75rem 1rem 0; }
+  .bot-card .summary { margin: 0; white-space: pre-line; }
+  .bot-card .fields { margin: .5rem 0 0; border-collapse: collapse; }
+  .bot-card .fields th, .bot-card .fields td { padding: .15rem .75rem .15rem 0; text-align: left; vertical-align: top; }
+  .bot-card .fields th { color: #666; font-weight: 600; white-space: nowrap; }
+  .bot-card .card-foot { display: flex; align-items: baseline; gap: .6rem; margin: 0; padding: .6rem 1rem .75rem; }
+  .bot-card .card-foot small { display: inline; margin: 0; }
+  .bot-card .status { font-size: .85rem; padding: 0 .5rem; border-radius: 1rem; background: #e7f3ea; color: #1d6b35; }
+  .bot-card .status.idle { background: #fbeaea; color: #a01b1b; }
   .idle { color: #a01b1b; }
   /* 첫 화면의 문서 — ABOUT.md가 여기 선다. */
   .doc { margin-top: 1.5rem; }
@@ -239,7 +258,12 @@ export function page(title: string, body: string): string {
     .chip-field button.chip-drop { background: #555; color: #e8e8e8; }
     .grave { border-top-color: #333; }
     small, dt { color: #9a9a9a; }
-    .bots li, .list li { border-color: #333; }
+    .list li, .bot-card { border-color: #333; }
+    .bot-card .card-header { background: #2a2a2a; }
+    .bot-card .avatar { background: #161616; }
+    .bot-card .fields th { color: #9a9a9a; }
+    .bot-card .status { background: #1d3a26; color: #9fd8ae; }
+    .bot-card .status.idle { background: #3a1d1d; color: #e88; }
     fieldset.profile-card { border-color: #333; }
     .profile-card .card-header { background: #2a2a2a; }
     .profile-card .avatar { background: #161616; }
@@ -337,21 +361,47 @@ export function landingPage(service: string, about: string, account?: AccountRec
 }
 
 /**
+ * 봇 하나의 카드 — **시에라의 프로필 카드와 같은 켜다**(2026-10-08 요구 — 하멜의 설정 › 연동처럼). 헤더(배경 · 초상화 ·
+ * 이름 · 아이디) · 본문(소개 · 커스텀 필드) · 밑줄(상태 · 붙은 시에라). **이름이 곧 그 봇으로 가는 길**이고, 카드
+ * 어디를 눌러도 같은 곳이다(이름의 링크가 카드를 덮는다 — 같은 곳으로 가는 링크를 둘 두지 않는다).
+ */
+function botCard(bot: BotRecord): string {
+  const declared = bot.declaration;
+  const fields = declared.fields ?? [];
+
+  return `<li class="bot-card">
+      <div class="card-header">
+        ${declared.header === undefined ? '' : `<img class="header" src="${escapeHtml(declared.header)}" alt="">`}
+        ${declared.avatar === undefined
+          ? `<span class="avatar fallback">${ICON_PERSON}</span>`
+          : `<img class="avatar" src="${escapeHtml(declared.avatar)}" alt="">`}
+        <div class="identity">
+          <a class="name" href="/bots/${bot.id}">${escapeHtml(declared.name)}</a>
+          ${bot.handle === undefined ? '' : `<code class="handle">@${escapeHtml(bot.handle)}</code>`}
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="summary">${escapeHtml(declared.summary)}</p>
+        ${fields.length === 0 ? '' : `<table class="fields"><tbody>${fields.map((one) => `<tr>
+          <th scope="row">${escapeHtml(one.name)}</th><td>${escapeHtml(one.value)}</td></tr>`).join('')}</tbody></table>`}
+      </div>
+      <p class="card-foot"><span class="status${isConnected(bot) ? '' : ' idle'}">${statusOf(bot)}</span>
+        <small>${escapeHtml(bot.origin)}</small></p>
+    </li>`;
+}
+
+/**
  * **내 봇들**(`/bots`) — 고르는 자리다.
  *
- * 만들기 폼은 여기 없다(`/bots/new`). 목록은 *무엇이 있고 무엇이 도는가*만 말한다.
+ * 만들기 폼은 여기 없다(`/bots/new`). 목록은 *무엇이 있고 무엇이 도는가*만 말한다 — **프로필 카드의 나열이다**
+ * (2026-10-08 요구).
  */
 export function homePage(
   service: string, account: AccountRecord, bots: readonly BotRecord[], max: number, line?: string,
 ): string {
   const rows = bots.length === 0
     ? '<p>아직 봇이 없습니다.</p>'
-    : `<ul class="bots">${bots.map((bot) => `<li>
-        <a href="/bots/${bot.id}">${escapeHtml(bot.declaration.name)}</a>
-        <small>${escapeHtml(bot.origin)}${bot.handle === undefined ? ''
-          : ` · <code>@${escapeHtml(bot.handle)}</code>`}</small>
-        <small class="${isConnected(bot) ? '' : 'idle'}">${statusOf(bot)}</small>
-      </li>`).join('')}</ul>`;
+    : `<ul class="bots">${bots.map(botCard).join('')}</ul>`;
 
   return page(who(service, account), `
     ${top(who(service, account), leave(true))}
