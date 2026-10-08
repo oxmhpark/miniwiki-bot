@@ -121,6 +121,9 @@ export interface ThreadItem {
   readonly created_at?: string;
 }
 
+/** 코어의 응답 그대로 — 도구가 읽고 줄인다(`tools.ts`). 칸을 여기서 다 적지 않는다: 코어가 칸을 늘려도 봇이 따라 고칠 일이 없다. */
+export type JsonRecord = Readonly<Record<string, unknown>>;
+
 /** 봇이 코어에 하는 일 — **검사가 이 자리를 대신 채운다**. */
 export interface Sierra {
   /** 나 — 아이디와 id. */
@@ -128,6 +131,32 @@ export interface Sierra {
 
   /** `post.max_length` — 익명으로 열리는 `/api/v1/instance`에서. 없으면 20000. */
   maxPostLength(): Promise<number>;
+
+  // ── 도구가 쓰는 읽기·쓰기 (2026-10-08 — `tools.ts`, 모델이 시에라를 도구로 쓴다) ──────────
+  // **봇 계정으로 읽는다** — 봇이 볼 수 있는 것을 본다(코어의 판정 그대로).
+
+  /** 글 검색 — `GET /api/v1/search`(문법: `from:` `tag:` `before:` `after:` `"구"` `~부정`). `read:feeds`. */
+  searchPosts(query: string, limit?: number): Promise<readonly JsonRecord[]>;
+  /** 글 하나 — `GET /api/v1/posts/{id}`. */
+  post(id: string): Promise<JsonRecord>;
+  /** 아이디로 계정 — `GET /api/v1/accounts/lookup`. */
+  lookup(handle: string): Promise<JsonRecord>;
+  /** 그 사람의 글 — `GET /api/v1/accounts/{id}/posts`. `read:feeds`. */
+  accountPosts(id: string, limit?: number): Promise<readonly JsonRecord[]>;
+  /** 해시태그의 글 — `GET /api/v1/tags/{tag}`. `read:feeds`. */
+  tagPosts(tag: string, limit?: number): Promise<readonly JsonRecord[]>;
+  /** 위키 문서 — `GET /api/v1/documents/by-path/{path}`(렌더된 본문 · 판 번호). 확장이 없으면 404. */
+  documentByPath(path: string): Promise<JsonRecord>;
+  /** 문서의 원본 — `GET /api/v1/documents/{id}/source.md`. **쓸 수 있는 사람만** 받는다. */
+  documentSource(id: string): Promise<string>;
+  /** 문서 검색 — `GET /api/v1/documents/search`. */
+  searchDocuments(query: string, limit?: number): Promise<readonly JsonRecord[]>;
+  /** 최근 바뀐 문서 — `GET /api/v1/documents/updates`. */
+  documentUpdates(limit?: number): Promise<readonly JsonRecord[]>;
+  /** 문서를 세운다 — `POST /api/v1/documents`. `write:posts`, 그 경로의 쓰기 권한. */
+  createDocument(path: string): Promise<JsonRecord>;
+  /** 본문을 저장한다 — `PUT /api/v1/documents/{id}/source`. 저장 하나가 판 하나이고, 낡은 판에 저장하면 `overwritten`이 선다. */
+  saveDocument(id: string, source: string, baseSeq: number): Promise<{ readonly seq: number; readonly overwritten: boolean }>;
 
   /**
    * **이 봇의 글이 연합에 닿는가** (2026-10-07) — 사이트 AND 봇 계정. 코어의 `FederationGate`와 같은
@@ -351,6 +380,50 @@ export class SierraClient implements Sierra {
     return await this.send<readonly Notification[]>('GET', `/api/v1/notifications?${query}`);
   }
 
+  async searchPosts(query: string, limit = 20): Promise<readonly JsonRecord[]> {
+    return await this.send('GET', `/api/v1/search?${new URLSearchParams({ q: query, limit: String(limit) }).toString()}`);
+  }
+
+  async post(id: string): Promise<JsonRecord> {
+    return await this.send('GET', `/api/v1/posts/${encodeURIComponent(id)}`);
+  }
+
+  async lookup(handle: string): Promise<JsonRecord> {
+    return await this.send('GET', `/api/v1/accounts/lookup?${new URLSearchParams({ handle: handle.replace(/^@/, '') }).toString()}`);
+  }
+
+  async accountPosts(id: string, limit = 20): Promise<readonly JsonRecord[]> {
+    return await this.send('GET', `/api/v1/accounts/${encodeURIComponent(id)}/posts?limit=${String(limit)}`);
+  }
+
+  async tagPosts(tag: string, limit = 20): Promise<readonly JsonRecord[]> {
+    return await this.send('GET', `/api/v1/tags/${encodeURIComponent(tag.replace(/^#/, ''))}?limit=${String(limit)}`);
+  }
+
+  async documentByPath(path: string): Promise<JsonRecord> {
+    return await this.send('GET', `/api/v1/documents/by-path/${documentPath(path)}`);
+  }
+
+  async documentSource(id: string): Promise<string> {
+    return await this.send('GET', `/api/v1/documents/${encodeURIComponent(id)}/source.md`, undefined, 'text');
+  }
+
+  async searchDocuments(query: string, limit = 10): Promise<readonly JsonRecord[]> {
+    return await this.send('GET', `/api/v1/documents/search?${new URLSearchParams({ q: query, per_page: String(limit) }).toString()}`);
+  }
+
+  async documentUpdates(limit = 20): Promise<readonly JsonRecord[]> {
+    return await this.send('GET', `/api/v1/documents/updates?limit=${String(limit)}`);
+  }
+
+  async createDocument(path: string): Promise<JsonRecord> {
+    return await this.send('POST', '/api/v1/documents', { path });
+  }
+
+  async saveDocument(id: string, source: string, baseSeq: number): Promise<{ readonly seq: number; readonly overwritten: boolean }> {
+    return await this.send('PUT', `/api/v1/documents/${encodeURIComponent(id)}/source`, { source, base_seq: baseSeq });
+  }
+
   async context(postId: string): Promise<readonly ThreadItem[]> {
     return await this.send<readonly ThreadItem[]>(
       'GET', `/api/v1/posts/${encodeURIComponent(postId)}/context`,
@@ -532,7 +605,7 @@ export class SierraClient implements Sierra {
     return granted.access_token;
   }
 
-  private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async send<T>(method: string, path: string, body?: unknown, as: 'json' | 'text' = 'json'): Promise<T> {
     const token = await this.accessToken();
 
     const response = await fetch(`${this.config.origin}${path}`, {
@@ -553,6 +626,15 @@ export class SierraClient implements Sierra {
       throw new SierraError(response.status, await response.text());
     }
 
-    return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return (as === 'text' ? await response.text() : await response.json()) as T;
   }
+}
+
+/** 문서 경로를 주소의 마디로 — 마디마다 거른다(`/`는 마디를 가르는 것이지 글자가 아니다). 앞뒤의 `/`는 뗀다. */
+function documentPath(path: string): string {
+  return path.split('/').filter((one) => one !== '').map(encodeURIComponent).join('/');
 }
