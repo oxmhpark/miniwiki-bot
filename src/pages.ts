@@ -167,7 +167,8 @@ export function page(title: string, body: string): string {
   .profile-card .pick-avatar { position: relative; z-index: 1; display: inline-block; margin: .75rem; border-radius: 50%; }
   .profile-card .avatar { display: block; width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; background: #fff; }
   .profile-card .avatar.fallback { display: flex; align-items: center; justify-content: center; color: #999; }
-  .profile-card .avatar.fallback[hidden] { display: none; }
+  /* **감춘 쪽은 감춘다** — 위의 \`display\`가 \`hidden\`을 덮어 빈 그림과 대체 얼굴이 함께 섰다(2026-10-09). */
+  .profile-card .avatar[hidden] { display: none; }
   .profile-card .identity { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center;
                             gap: .5rem; padding: .25rem .75rem; background: rgb(0 0 0 / 55%); color: #fff; }
   .profile-card .identity .handle { background: #fff; color: #a01b1b; }
