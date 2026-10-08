@@ -120,6 +120,11 @@ class Browser {
     });
   }
 
+  /** 파일이 실린 폼 — 경계는 `fetch`가 짓는다. */
+  async upload(path: string, form: FormData): Promise<Response> {
+    return await this.go(path, { method: 'POST', body: form });
+  }
+
   private async go(path: string, init: RequestInit): Promise<Response> {
     const response = await original(`${this.at}${path}`, {
       ...init,
@@ -261,38 +266,60 @@ test('커스텀 필드는 자리를 세우고 아직 안 선다고 말한다', a
   expect(profile).toContain('disabled');
 });
 
-test('초상화와 배경은 선언으로 나간다 — 비우면 지워진다', async () => {
+test('초상화와 배경은 올린 파일이다 — 버전 있는 우리 주소가 선언에 실리고, 지우기로 내린다', async () => {
   const browser = await signIn();
   const id = await makeBot(browser);
-
   const same = { name: '에코', summary: '되받는다', origin: 'https://kbtest.codemach.net' };
-
-  await browser.post(`/bots/${id}/declaration`, {
-    ...same, avatar: 'https://cdn.example/a.png', header: 'https://cdn.example/h.png',
-  });
-
-  const manifest = await (await browser.get(`/bots/${id}/manifest.json`)).json() as {
-    readonly avatar?: string; readonly header?: string; readonly version: string;
+  const png = (tail: number): File => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, tail])], 'a.png');
+  const form = (extra: Record<string, string | File>): FormData => {
+    const one = new FormData();
+    for (const [key, value] of Object.entries({ ...same, ...extra })) {
+      one.append(key, value);
+    }
+    return one;
   };
+  const manifest = async (): Promise<{ readonly avatar?: string; readonly version: string }> =>
+    await (await browser.get(`/bots/${id}/manifest.json`)).json() as { readonly avatar?: string; readonly version: string };
 
-  expect(manifest.avatar).toBe('https://cdn.example/a.png');
-  expect(manifest.header).toBe('https://cdn.example/h.png');
-  expect(manifest.version).toBe('0.1.0+2');
+  await browser.upload(`/bots/${id}/declaration`, form({ avatar: png(1) }));
+  const first = (await manifest()).avatar ?? '';
+  expect(first).toMatch(new RegExp(`/bots/${id}/images/avatar/[0-9a-f]{32}$`));
 
-  // **비우면 지운다** — 빈 칸과 *안 적은 것*이 갈리면 초상화를 내릴 길이 없다.
-  await browser.post(`/bots/${id}/declaration`, { ...same, avatar: '', header: '' });
+  // **그 주소로 그림이 나가고 오래 담긴다.**
+  const served = await browser.get(new URL(first).pathname);
+  expect(served.status).toBe(200);
+  expect(served.headers.get('content-type')).toBe('image/png');
+  expect(served.headers.get('cache-control')).toContain('immutable');
 
-  const bare = await (await browser.get(`/bots/${id}/manifest.json`)).json() as {
-    readonly avatar?: string; readonly version: string;
-  };
+  // **새로 올리면 주소가 바뀌고 옛 주소는 아무것도 내지 않는다.**
+  await browser.upload(`/bots/${id}/declaration`, form({ avatar: png(2) }));
+  const second = (await manifest()).avatar ?? '';
+  expect(second).not.toBe(first);
+  expect((await browser.get(new URL(first).pathname)).status).toBe(404);
 
-  expect(bare.avatar).toBeUndefined();
-  expect(bare.version).toBe('0.1.0+3');
+  // **고르지 않으면 지금 것을 둔다.**
+  await browser.upload(`/bots/${id}/declaration`, form({ name: '에코2' }));
+  expect((await manifest()).avatar).toBe(second);
 
-  // 주소가 아니면 받지 않는다.
-  await browser.post(`/bots/${id}/declaration`, { ...same, avatar: '그림' });
-  expect((await store.bot(id))?.declaration.avatar).toBeUndefined();
-  expect((await store.bot(id))?.settingsVersion).toBe(3);
+  // **그림이 아니면 받지 않는다.**
+  await browser.upload(`/bots/${id}/declaration`, form({ avatar: new File(['<svg/>'], 'a.svg') }));
+  expect((await manifest()).avatar).toBe(second);
+
+  // **지우기로 내린다.**
+  await browser.upload(`/bots/${id}/declaration`, form({ clear_avatar: '1' }));
+  expect((await manifest()).avatar).toBeUndefined();
+  expect((await browser.get(new URL(second).pathname)).status).toBe(404);
+});
+
+test('옛 판에서 주소로 적어 둔 그림은 새로 올리기 전까지 그대로다', async () => {
+  const browser = await signIn();
+  const id = await makeBot(browser);
+  const bot = await store.bot(id);
+  await store.saveBot({ ...bot!, declaration: { ...bot!.declaration, header: 'https://cdn.example/h.png' } });
+
+  await browser.post(`/bots/${id}/declaration`, { name: '에코2', summary: '되받는다', origin: 'https://kbtest.codemach.net' });
+
+  expect((await store.bot(id))?.declaration.header).toBe('https://cdn.example/h.png');
 });
 
 test('선언을 고치면 판이 오른다', async () => {

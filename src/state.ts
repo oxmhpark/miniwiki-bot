@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -140,6 +141,9 @@ function safeGuid(value: string, what: string): string {
   return value.toLowerCase();
 }
 
+/** 봇의 그림 자리 둘. */
+export type ImageKind = 'avatar' | 'header';
+
 export class FileStore {
   constructor(private readonly dir: string) {}
 
@@ -193,6 +197,47 @@ export class FileStore {
   /** **봇 폴더째 지운다** — 커서도 맡긴 것도 함께 간다. */
   async forgetBot(id: string): Promise<void> {
     await rm(join(this.dir, 'bots', safeSegment(id, '봇 id')), { recursive: true, force: true });
+  }
+
+  // ── 봇의 초상화·배경 (2026-10-08 — 주소 대신 올린다) ─────────────────────────
+
+  /**
+   * 그림을 맡긴다 — **돌려주는 해시가 공개 주소의 버전 마디다**(`/bots/{id}/images/{kind}/{hash}`).
+   * 내용이 바뀌면 주소가 바뀌므로 오래 담아도 된다(모체 `CLAUDE.md` · 오래 담기는 주소는 버전을
+   * 지닌다). 한 자리에 하나뿐이라 새로 올리면 옛것은 사라진다.
+   */
+  async saveImage(botId: string, kind: ImageKind, bytes: Uint8Array, mime: string): Promise<string> {
+    const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 32);
+    const dir = join(this.botDir(botId), 'images');
+    await mkdir(dir, { recursive: true });
+
+    const temporary = join(dir, `${kind}.bin.tmp`);
+    await writeFile(temporary, bytes);
+    await rename(temporary, join(dir, `${kind}.bin`));
+    await writeJson(join(dir, `${kind}.json`), { mime, hash });
+
+    return hash;
+  }
+
+  /** 맡긴 그림 — **없으면 `undefined`**. */
+  async image(botId: string, kind: ImageKind): Promise<{ readonly bytes: Buffer; readonly mime: string; readonly hash: string } | undefined> {
+    const dir = join(this.botDir(botId), 'images');
+    const meta = await readJson<{ mime: string; hash: string }>(join(dir, `${kind}.json`));
+    if (meta === undefined) {
+      return undefined;
+    }
+
+    try {
+      return { bytes: await readFile(join(dir, `${kind}.bin`)), ...meta };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async forgetImage(botId: string, kind: ImageKind): Promise<void> {
+    const dir = join(this.botDir(botId), 'images');
+    await rm(join(dir, `${kind}.json`), { force: true });
+    await rm(join(dir, `${kind}.bin`), { force: true });
   }
 
   // ── 봇마다의 커서 ───────────────────────────────────────────────────────

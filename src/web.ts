@@ -15,7 +15,7 @@ import {
 import { fillHidden, renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
-import type { AccountRecord, BotDeclaration, BotRecord, FileStore } from './state.js';
+import type { AccountRecord, BotDeclaration, BotRecord, FileStore, ImageKind } from './state.js';
 import { isConnected } from './state.js';
 import { escapeHtml } from './text.js';
 import { Tickets } from './tickets.js';
@@ -50,6 +50,7 @@ import { Tickets } from './tickets.js';
  * GET  /bots/{id}/delete         지우기 전에 한 번 보인다
  * POST /bots/{id}/delete         **지운다** — 이 서비스의 것까지다
  * GET  /bots/{id}/manifest.json  **공개** — 코어가 읽는다
+ * GET  /bots/{id}/images/{kind}/{hash}  **공개** — 올린 초상화·배경(선언이 가리킨다, 2026-10-08)
  * GET  /connect/{티켓}            **말 거는 사람의 자리** — 봇에게 무언가를 맡긴다
  * POST /connect/{티켓}            맡는다 — **티켓은 여기서 탄다**
  * POST /bots/{id}/x/{무엇}       봇의 칸
@@ -132,6 +133,26 @@ async function handle(
     const body = JSON.stringify(
       manifestOf(bot, options.codeVersion, options.scopes, options.commands, gates), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);
+    return;
+  }
+
+  /*
+   * **올린 그림** — 선언이 이 주소를 가리키고 코어가 승인할 때 한 번 받아 간다(2026-10-08). 주소의
+   * 끝이 내용 해시라 오래 담는다 — **지금 것과 다르면 404**다(옛 주소가 다른 그림을 내지 않는다).
+   */
+  const imaged = /^\/bots\/([0-9a-fA-F-]{36})\/images\/(avatar|header)\/([0-9a-f]{32})$/.exec(path);
+  if (imaged !== null && request.method === 'GET') {
+    const image = await options.store.image(imaged[1] ?? '', imaged[2] as ImageKind).catch(() => undefined);
+    if (image === undefined || image.hash !== imaged[3]) {
+      send(response, 404, '<p>그런 그림이 없습니다.</p>');
+      return;
+    }
+
+    response.writeHead(200, {
+      'content-type': image.mime,
+      'cache-control': 'public, max-age=31536000, immutable',
+      'x-content-type-options': 'nosniff',
+    }).end(image.bytes);
     return;
   }
 
@@ -478,27 +499,64 @@ async function createBot(
 async function editDeclaration(
   request: IncomingMessage, response: ServerResponse, options: WebOptions, bot: BotRecord,
 ): Promise<void> {
-  const form = await readForm(request);
-  const name = (form.get('name') ?? '').trim();
-  const summary = (form.get('summary') ?? '').trim();
+  let form: FormData;
+  try {
+    form = await readMultipart(request, IMAGE_FORM_MAX);
+  } catch (error) {
+    back(response, bot.id, 'profile', (error as Error).message);
+    return;
+  }
+
+  const name = String(form.get('name') ?? '').trim();
+  const summary = String(form.get('summary') ?? '').trim();
 
   if (name === '' || summary === '') {
     back(response, bot.id, 'profile', '이름과 소개가 있어야 합니다.');
     return;
   }
 
-  // **비우면 지운다** — 빈 칸과 *안 적은 것*이 갈리면 초상화를 내릴 길이 없다.
-  const avatar = picture(form.get('avatar') ?? '');
-  const header = picture(form.get('header') ?? '');
+  /*
+   * **그림은 주소가 아니라 파일이다**(2026-10-08 요구). 올린 것을 맡고 **버전 있는 우리 주소**를 선언에
+   * 싣는다 — 코어의 계약(선언의 `avatar`·`header`는 주소)은 그대로다. 지우기가 올리기보다 앞이고,
+   * 둘 다 없으면 지금 것을 둔다(옛 판에서 주소로 적어 둔 것도).
+   */
+  const pictures: Partial<Record<ImageKind, string>> = {};
+  for (const kind of ['avatar', 'header'] as const) {
+    const kept = bot.declaration[kind];
 
-  if (avatar === false || header === false) {
-    back(response, bot.id, 'profile', '초상화와 배경은 http나 https 주소여야 합니다.');
-    return;
+    if (form.get(`clear_${kind}`) !== null) {
+      await options.store.forgetImage(bot.id, kind);
+      continue;
+    }
+
+    const file = form.get(kind);
+    if (file instanceof File && file.size > 0) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const mime = imageMime(bytes);
+      if (mime === undefined) {
+        back(response, bot.id, 'profile', '초상화와 배경은 png·jpg·gif·webp 파일이어야 합니다.');
+        return;
+      }
+      if (bytes.byteLength > IMAGE_MAX) {
+        back(response, bot.id, 'profile', `그림은 ${String(IMAGE_MAX / 1024 / 1024)}MB까지입니다.`);
+        return;
+      }
+
+      const hash = await options.store.saveImage(bot.id, kind, bytes, mime);
+      pictures[kind] = `${options.publicOrigin}/bots/${bot.id}/images/${kind}/${hash}`;
+      continue;
+    }
+
+    if (kept !== undefined) {
+      pictures[kind] = kept;
+    }
   }
+
+  const { avatar, header } = pictures;
 
   let origin = bot.origin;
   if (!isConnected(bot)) {
-    const asked = cleanOrigin(form.get('origin') ?? '');
+    const asked = cleanOrigin(String(form.get('origin') ?? ''));
     if (asked === undefined) {
       back(response, bot.id, 'profile', '시에라 주소는 https여야 합니다.');
       return;
@@ -645,13 +703,43 @@ async function connectBot(
  * **코어가 한 번 닿을 수 있는 공개 주소여야 한다.** 코어는 이 주소를 받아 자기 것으로 만들고
  * (`ApplyManifestAsync`), 못 받아도 봇은 선다 — 기본 얼굴이 서고 임자가 나중에 올린다.
  */
-function picture(raw: string): string | undefined | false {
-  const url = raw.trim();
-  if (url === '') {
-    return undefined;
+/** 그림 하나의 상한 — 시에라의 `profile.image_max_size_bytes` 기본과 같다. 넘는 것은 코어도 받지 않는다. */
+const IMAGE_MAX = 10 * 1024 * 1024;
+
+/** 등록정보 폼의 상한 — 그림 둘과 글자 몇 줄. */
+const IMAGE_FORM_MAX = 2 * IMAGE_MAX + 64 * 1024;
+
+/** **내용이 형식을 말한다** — 브라우저가 적어 보낸 형식을 믿지 않는다(코어와 같은 규칙). */
+function imageMime(bytes: Uint8Array): string | undefined {
+  const at = (offset: number, ...want: number[]): boolean => want.every((one, index) => bytes[offset + index] === one);
+
+  if (at(0, 0x89, 0x50, 0x4e, 0x47)) return 'image/png';
+  if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg';
+  if (at(0, 0x47, 0x49, 0x46, 0x38)) return 'image/gif';
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp';
+
+  return undefined;
+}
+
+/**
+ * 파일이 실린 폼을 읽는다 — **Node 안의 `Request.formData()`가 가른다**(의존을 들이지 않는다).
+ * 상한을 넘으면 읽기를 멈추고 던진다 — 남의 브라우저가 우리 메모리를 정하게 두지 않는다.
+ */
+async function readMultipart(request: IncomingMessage, max: number): Promise<FormData> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  for await (const chunk of request) {
+    size += (chunk as Buffer).length;
+    if (size > max) {
+      throw new Error(`올린 것이 너무 큽니다 — 그림은 하나에 ${String(IMAGE_MAX / 1024 / 1024)}MB까지입니다.`);
+    }
+    chunks.push(chunk as Buffer);
   }
 
-  return /^https?:\/\/[^\s/]+\/?/.test(url) ? url : false;
+  const type = request.headers['content-type'] ?? 'application/x-www-form-urlencoded';
+  return await new Request('http://form.invalid/', { method: 'POST', headers: { 'content-type': type }, body: Buffer.concat(chunks) })
+    .formData();
 }
 
 /** 끝의 `/`를 떼고 https인지 본다 — **아니면 `undefined`**. */

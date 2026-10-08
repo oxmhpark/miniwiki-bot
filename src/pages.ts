@@ -156,6 +156,11 @@ export function page(title: string, body: string): string {
   .subtabs a[aria-current] { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
   /* **아직 서지 않은 칸도 자리를 지킨다** — 감추면 무엇이 남았는지 볼 수 없다. */
   .todo input { opacity: .6; }
+  /* **그림 칸** — 지금 그림이 칸 아래 작게 서고, 지우기는 그 옆의 체크다. */
+  .picture img { display: block; margin: .4rem 0; max-height: 6rem; max-width: 100%; border-radius: .3rem; }
+  .picture img.avatar { width: 6rem; height: 6rem; object-fit: cover; }
+  .picture label.choice { display: inline-flex; align-items: center; gap: .3rem; }
+  .picture label.choice input { width: auto; }
   .bots { list-style: none; padding: 0; }
   .bots li { border: 1px solid #ddd; border-radius: .3rem; padding: .8rem 1rem; margin: .6rem 0; }
   .bots a { font-weight: 600; }
@@ -369,30 +374,39 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     ${body}`);
 }
 
+/** 그림 칸 하나 — 지금 것을 보이고, 새 파일과 지우기를 받는다. 파일을 고르지 않으면 지금 것을 둔다. */
+function picture(name: 'avatar' | 'header', label: string, current: string | undefined, hint?: string): string {
+  const shown = current === undefined ? '' : `<img class="${name}" src="${escapeHtml(current)}" alt="">
+      <label class="choice"><input type="checkbox" name="clear_${name}" value="1"> ${label} 지우기</label>`;
+
+  return `<p class="picture"><label>${label}
+      <input name="${name}" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+      ${shown}
+      <small>png·jpg·gif·webp, 10MB까지. 고르지 않으면 지금 것을 둡니다.${hint === undefined ? '' : ` ${hint}`}</small></p>`;
+}
+
 /**
  * **등록정보** — 이 봇이 자기를 말하는 것.
  *
  * 여기 적은 것이 **선언**(`manifest.json`)이 되고, 고치면 판이 오른다. 시에라는 임자가
  * *새 판 승인*을 눌러야 그것을 가져간다 — **여기서 고쳤다고 저쪽이 바뀌지 않는다.**
  *
- * **초상화와 배경은 주소로 준다.** 코어가 그 주소를 한 번 받아 자기 것으로 만들므로(남의
- * 주소를 그대로 걸면 그 봇의 프로필을 여는 사람마다 남의 서버에 발자국이 남는다) 여기 적는
- * 것은 **코어가 한 번 닿을 수 있는 공개 주소**다.
+ * **초상화와 배경은 파일로 올린다**(2026-10-08 요구 — ~~주소로 준다~~). 이 서비스가 맡아 **버전 있는
+ * 공개 주소**(`/bots/{id}/images/{kind}/{hash}`)로 내주고 선언이 그 주소를 싣는다 — 코어는 승인할 때
+ * 한 번 받아 자기 것으로 만든다(남의 주소를 걸면 프로필을 여는 사람마다 남의 서버에 발자국이 남는다).
+ * 지우기 체크와 새 파일은 같은 칸이라 한 요청이다.
  */
 export function profileTab(bot: BotRecord, line?: string): string {
   const connected = isConnected(bot);
 
   return shell(bot, 'profile', `
-    <form method="post" action="/bots/${bot.id}/declaration">
+    <form method="post" action="/bots/${bot.id}/declaration" enctype="multipart/form-data" data-wait="저장하는 중…">
       <p><label>이름 <input name="name" required maxlength="60"
         value="${escapeHtml(bot.declaration.name)}"></label></p>
       <p><label>소개 <input name="summary" required maxlength="200"
         value="${escapeHtml(bot.declaration.summary)}"></label></p>
-      <p><label>초상화 <input name="avatar" type="url" placeholder="https://..."
-        value="${escapeHtml(bot.declaration.avatar ?? '')}"></label>
-        <small>비우면 시에라의 기본 얼굴이 섭니다.</small></p>
-      <p><label>배경 <input name="header" type="url" placeholder="https://..."
-        value="${escapeHtml(bot.declaration.header ?? '')}"></label></p>
+      ${picture('avatar', '초상화', bot.declaration.avatar, '없으면 시에라의 기본 얼굴이 섭니다.')}
+      ${picture('header', '배경', bot.declaration.header)}
       ${connected
         ? `<p>붙은 시에라 <code>${escapeHtml(bot.origin)}</code>
            <small>이은 뒤에는 바꿀 수 없습니다 — 맡은 자격 증명이 그 시에라의 것입니다.</small></p>`
