@@ -302,11 +302,14 @@ async function handle(
      * 승인 없이 서고, 문의 그룹이 바뀌었으면 시에라 임자의 승인을 기다린다 — 그 사실을 함께 말한다.
      * **못 불러도 저장은 섰다** — 봇이 붙지 않은 상태이거나 코어가 이 문을 모르는 판일 수 있다.
      */
-    if (name === 'settings' && options.gates !== undefined && bot.sealedClientSecret !== undefined) {
+    if (name === 'settings' && bot.sealedClientSecret !== undefined) {
       try {
         const refreshed = await ctx.sierra.refreshManifest();
         if (!refreshed.applied) {
           line = `${line ?? '저장했다'} — 문의 그룹이 바뀌어 시에라 임자의 새 판 승인을 기다린다`;
+        }
+        if (refreshed.noticed === true) {
+          line = `${line ?? '저장했다'} — 시에라 임자에게 새 판을 알렸다`;
         }
       } catch (error) {
         options.log(`[${bot.handle ?? bot.id}] 선언을 다시 읽히지 못했다: ${(error as Error).message}`);
@@ -601,15 +604,24 @@ async function editDeclaration(
     return;
   }
 
-  await options.store.saveBot({
-    ...bot,
-    origin,
-    declaration,
-    settingsVersion: moved ? bot.settingsVersion + 1 : bot.settingsVersion,
-  });
+  const saved = { ...bot, origin, declaration, settingsVersion: moved ? bot.settingsVersion + 1 : bot.settingsVersion };
+  await options.store.saveBot(saved);
+
+  /*
+   * **판이 올랐으면 코어가 선언을 다시 읽게 한다**(2026-10-09) — 코어가 기다리는 판을 시에라 임자에게 알린다(한 판에 한 번).
+   * 못 불러도 저장은 섰다 — 옛 코어이거나 시에라가 잠깐 닿지 않을 수 있다.
+   */
+  let noticed = false;
+  if (moved && isConnected(bot) && bot.sealedClientSecret !== undefined) {
+    try {
+      noticed = (await options.fleet.contextOf(saved).sierra.refreshManifest()).noticed === true;
+    } catch (error) {
+      options.log(`[${bot.handle ?? bot.id}] 선언을 다시 읽히지 못했다: ${(error as Error).message}`);
+    }
+  }
 
   back(response, bot.id, 'profile', moved && isConnected(bot)
-    ? '고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다.'
+    ? `고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다${noticed ? ' — 임자에게 알렸습니다.' : '.'}`
     : '고쳤습니다.');
 }
 

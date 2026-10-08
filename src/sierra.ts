@@ -124,6 +124,16 @@ export interface ThreadItem {
 /** 코어의 응답 그대로 — 도구가 읽고 줄인다(`tools.ts`). 칸을 여기서 다 적지 않는다: 코어가 칸을 늘려도 봇이 따라 고칠 일이 없다. */
 export type JsonRecord = Readonly<Record<string, unknown>>;
 
+/**
+ * `POST /api/v1/bots/me/manifest`의 답 — 섰는가(`applied`), 아니면 왜 아닌가(`groups_changed`), 그리고 **이번에 시에라 임자에게
+ * 새 판을 알렸는가**(`noticed`, 2026-10-09 — 한 판에 한 번이라 다음에는 `false`. 옛 코어는 싣지 않는다).
+ */
+export interface ManifestRefresh {
+  readonly applied: boolean;
+  readonly reason?: string | null;
+  readonly noticed?: boolean;
+}
+
 /** 봇이 코어에 하는 일 — **검사가 이 자리를 대신 채운다**. */
 export interface Sierra {
   /** 나 — 아이디와 id. */
@@ -283,7 +293,7 @@ export interface Sierra {
    * **제 선언을 코어가 다시 읽게 한다** — 트리거의 그룹이 그대로면 승인 없이 선다(코어 M61 확정 4).
    * 그룹이 바뀌었으면 `applied: false`, `reason: 'groups_changed'` — 시에라 임자의 승인을 기다린다.
    */
-  refreshManifest(): Promise<{ readonly applied: boolean; readonly reason?: string | null }>;
+  refreshManifest(): Promise<ManifestRefresh>;
 }
 
 interface TokenResponse {
@@ -469,7 +479,7 @@ export class SierraClient implements Sierra {
     return await this.send('GET', `/api/v1/bots/me/membership/${encodeURIComponent(accountId)}?${query}`);
   }
 
-  async refreshManifest(): Promise<{ readonly applied: boolean; readonly reason?: string | null }> {
+  async refreshManifest(): Promise<ManifestRefresh> {
     return await this.send('POST', '/api/v1/bots/me/manifest');
   }
 
