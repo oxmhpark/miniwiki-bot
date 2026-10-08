@@ -442,6 +442,9 @@ const ICON_PERSON = '<svg viewBox="0 0 24 24" width="48" height="48" fill="none"
 
 const IMAGE_TIP = 'png·jpg·gif·webp, 10MB까지. 고르지 않으면 지금 것을 둡니다.';
 
+/** 소개의 도움말 — **시에라의 프로필 고치기와 같은 말이다**(2026-10-08) — 이 소개가 곧 시에라 프로필의 소개라 같은 규칙을 진다. */
+const BIO_TIP = '마크다운으로 적습니다. @아이디와 [[위키링크]]는 링크가 되지만 알림은 가지 않습니다.';
+
 /** 커스텀 필드 한 줄 — 이름과 값, 저마다 툴팁을 진다. */
 function fieldRow(field: { readonly name: string; readonly value: string }, at: number): string {
   return `<div class="field-row">
@@ -500,7 +503,7 @@ export function profileTab(bot: BotRecord, line?: string): string {
         </div>
         <div class="card-body">
           <label class="sr-only" for="bot-summary">소개</label>
-          <span class="tipped" data-tip="시에라 프로필의 소개가 됩니다."><textarea class="inline-edit summary" id="bot-summary" name="summary"
+          <span class="tipped" data-tip="${BIO_TIP}"><textarea class="inline-edit summary" id="bot-summary" name="summary"
             required maxlength="200" rows="2" placeholder="소개" data-autosize>${escapeHtml(declared.summary)}</textarea></span>
           <fieldset class="fields" data-fieldrows data-max="${String(FIELDS_MAX)}">
             <legend class="sr-only">커스텀 필드</legend>
