@@ -16,7 +16,7 @@ import { fillHidden, renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
 import { SierraClient, SierraError } from './sierra.js';
 import type { AccountRecord, BotDeclaration, BotRecord, FileStore, ImageKind } from './state.js';
-import { isConnected } from './state.js';
+import { FIELD_MAX, FIELDS_MAX, isConnected } from './state.js';
 import { escapeHtml } from './text.js';
 import { Tickets } from './tickets.js';
 
@@ -554,6 +554,27 @@ async function editDeclaration(
 
   const { avatar, header } = pictures;
 
+  /*
+   * **커스텀 필드**(2026-10-08) — 이름이 빈 줄은 버린다(시에라와 같은 규칙). **한 번도 적지 않은 봇은 필드를 싣지
+   * 않는다** — 빈 목록을 실으면 시에라에서 적어 둔 필드가 승인과 함께 지워진다.
+   */
+  const names = form.getAll('field_name').map((one) => String(one).trim());
+  const values = form.getAll('field_value').map((one) => String(one).trim());
+  const rows = names
+    .map((fieldName, at) => ({ name: fieldName, value: values[at] ?? '' }))
+    .filter((one) => one.name !== '');
+
+  if (rows.length > FIELDS_MAX) {
+    back(response, bot.id, 'profile', `커스텀 필드는 ${String(FIELDS_MAX)}줄까지입니다.`);
+    return;
+  }
+  if (rows.some((one) => one.name.length > FIELD_MAX || one.value.length > FIELD_MAX)) {
+    back(response, bot.id, 'profile', `커스텀 필드의 이름과 값은 ${String(FIELD_MAX)}자까지입니다.`);
+    return;
+  }
+
+  const fields = rows.length === 0 && bot.declaration.fields === undefined ? undefined : rows;
+
   let origin = bot.origin;
   if (!isConnected(bot)) {
     const asked = cleanOrigin(String(form.get('origin') ?? ''));
@@ -570,6 +591,7 @@ async function editDeclaration(
     summary,
     ...(avatar === undefined ? {} : { avatar }),
     ...(header === undefined ? {} : { header }),
+    ...(fields === undefined ? {} : { fields }),
   };
 
   const moved = declarationChanged(bot.declaration, declaration);
@@ -703,6 +725,7 @@ async function connectBot(
  * **코어가 한 번 닿을 수 있는 공개 주소여야 한다.** 코어는 이 주소를 받아 자기 것으로 만들고
  * (`ApplyManifestAsync`), 못 받아도 봇은 선다 — 기본 얼굴이 서고 임자가 나중에 올린다.
  */
+
 /** 그림 하나의 상한 — 시에라의 `profile.image_max_size_bytes` 기본과 같다. 넘는 것은 코어도 받지 않는다. */
 const IMAGE_MAX = 10 * 1024 * 1024;
 

@@ -256,14 +256,44 @@ test('봇 하나의 자리가 넷으로 갈린다 — 탭이 곧 주소다', asy
   expect(features).toContain('이은 뒤에 섭니다');
 });
 
-test('커스텀 필드는 자리를 세우고 아직 안 선다고 말한다', async () => {
+test('커스텀 필드는 선언에 실린다 — 한 번도 적지 않으면 싣지 않고, 다 지우면 빈 목록이다', async () => {
   const browser = await signIn();
   const id = await makeBot(browser);
+  const same = { name: '에코', summary: '되받는다', origin: 'https://kbtest.codemach.net' };
+  const save = async (rows: readonly (readonly [string, string])[]): Promise<Response> => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(same)) {
+      form.append(key, value);
+    }
+    for (const [name, value] of rows) {
+      form.append('field_name', name);
+      form.append('field_value', value);
+    }
+    return await browser.upload(`/bots/${id}/declaration`, form);
+  };
+  const manifest = async (): Promise<{ readonly fields?: readonly { name: string; value: string }[] }> =>
+    await (await browser.get(`/bots/${id}/manifest.json`)).json() as { readonly fields?: readonly { name: string; value: string }[] };
 
+  // **화면에 필드 줄이 서고 꺼져 있지 않다.**
   const profile = await (await browser.get(`/bots/${id}`)).text();
-  expect(profile).toContain('커스텀 필드');
-  expect(profile).toContain('아직 서지 않았습니다');
-  expect(profile).toContain('disabled');
+  expect(profile).toContain('name="field_name"');
+  expect(profile).not.toContain('아직 서지 않았습니다');
+
+  // **한 번도 적지 않으면 싣지 않는다** — 시에라에서 적어 둔 필드를 지우지 않는다.
+  await save([['', '']]);
+  expect((await manifest()).fields).toBeUndefined();
+
+  // **이름이 빈 줄은 버린다.**
+  await save([['사는 곳', '어딘가'], ['', '버려진다'], ['누리집', 'https://bot.example']]);
+  expect((await manifest()).fields).toEqual([{ name: '사는 곳', value: '어딘가' }, { name: '누리집', value: 'https://bot.example' }]);
+
+  // **상한을 넘으면 받지 않는다.**
+  await save([['1', 'a'], ['2', 'b'], ['3', 'c'], ['4', 'd'], ['5', 'e']]);
+  expect((await manifest()).fields).toHaveLength(2);
+
+  // **다 지우면 빈 목록이다** — 시에라가 지운다.
+  await save([['', '']]);
+  expect((await manifest()).fields).toEqual([]);
 });
 
 test('초상화와 배경은 올린 파일이다 — 버전 있는 우리 주소가 선언에 실리고, 지우기로 내린다', async () => {

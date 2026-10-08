@@ -1,5 +1,5 @@
 import type { AccountRecord, BotRecord } from './state.js';
-import { isConnected } from './state.js';
+import { FIELD_MAX, FIELDS_MAX, isConnected } from './state.js';
 import { escapeHtml } from './text.js';
 
 /**
@@ -156,11 +156,58 @@ export function page(title: string, body: string): string {
   .subtabs a[aria-current] { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
   /* **아직 서지 않은 칸도 자리를 지킨다** — 감추면 무엇이 남았는지 볼 수 없다. */
   .todo input { opacity: .6; }
-  /* **그림 칸** — 지금 그림이 칸 아래 작게 서고, 지우기는 그 옆의 체크다. */
-  .picture img { display: block; margin: .4rem 0; max-height: 6rem; max-width: 100%; border-radius: .3rem; }
-  .picture img.avatar { width: 6rem; height: 6rem; object-fit: cover; }
-  .picture label.choice { display: inline-flex; align-items: center; gap: .3rem; }
-  .picture label.choice input { width: auto; }
+  /* **눈에서만 감춘다** — 보조 기술은 읽는다(공용 규칙). */
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+             clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  /* **등록정보 카드**(2026-10-08) — 시에라의 프로필 카드와 같은 켜. 칸은 글자처럼 서 있다가 커서를 올리면 외곽선이 드러난다. */
+  fieldset.profile-card { min-width: 0; margin: 0 0 1rem; padding: 0; border: 1px solid #ddd; border-radius: .5rem; overflow: visible; }
+  .profile-card .card-header { position: relative; min-height: 9rem; background: #e9e9e9; border-radius: .5rem .5rem 0 0; overflow: hidden; }
+  .profile-card .pick-header { position: absolute; inset: 0; z-index: 0; }
+  .profile-card .pick-header .header { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .profile-card .pick-avatar { position: relative; z-index: 1; display: inline-block; margin: .75rem; border-radius: 50%; }
+  .profile-card .avatar { display: block; width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; background: #fff; }
+  .profile-card .avatar.fallback { display: flex; align-items: center; justify-content: center; color: #999; }
+  .profile-card .avatar.fallback[hidden] { display: none; }
+  .profile-card .identity { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; align-items: center;
+                            gap: .5rem; padding: .25rem .75rem; background: rgb(0 0 0 / 55%); color: #fff; }
+  .profile-card .identity .handle { background: #fff; color: #a01b1b; }
+  .profile-card .pick:focus { outline: none; }
+  .profile-card .pick-actions { position: absolute; display: flex; gap: .35rem; opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .profile-card .pick-header .pick-actions { top: .5rem; right: .5rem; }
+  .profile-card .pick-avatar .pick-actions { inset: 0; align-items: center; justify-content: center; }
+  @media (hover: hover) { .profile-card .pick:hover > .pick-actions { opacity: 1; pointer-events: auto; } }
+  .profile-card .pick:focus-within > .pick-actions { opacity: 1; pointer-events: auto; }
+  .profile-card .pick-button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem;
+                               border-radius: 50%; background: rgb(0 0 0 / 60%); color: #fff; cursor: pointer; }
+  .profile-card .pick-button:hover { background: rgb(0 0 0 / 80%); }
+  .profile-card .pick-button.danger:hover, .profile-card .pick-button.danger.active { background: #a01b1b; }
+  .profile-card .pick-button:focus-within { outline: 2px solid #fff; outline-offset: 1px; }
+  .profile-card input.inline-edit, .profile-card textarea.inline-edit { box-sizing: border-box; width: 100%; margin: 0; padding: .15rem .35rem;
+      border: 1px solid transparent; border-radius: .3rem; background: transparent; color: inherit; font: inherit; line-height: 1.5; }
+  .profile-card .inline-edit:hover { border-color: #bbb; }
+  .profile-card .inline-edit:focus { outline: none; border-color: #1a1a1a; background: #fff; color: #1a1a1a; }
+  .profile-card .identity .inline-edit { flex: 1 1 12rem; min-width: 0; font-weight: 600; }
+  .profile-card .identity .inline-edit:hover { border-color: rgb(255 255 255 / 70%); }
+  .profile-card .identity .inline-edit:focus { border-color: #fff; background: rgb(0 0 0 / 35%); color: #fff; }
+  .profile-card textarea[data-autosize] { field-sizing: content; overflow: hidden; resize: none; }
+  .profile-card textarea.summary { min-height: 3rem; }
+  .profile-card .card-body { padding: .75rem .65rem 1rem; }
+  .profile-card fieldset.fields { min-width: 0; margin: .5rem 0 0; padding: 0; border: 0; }
+  .profile-card .field-row { display: grid; grid-template-columns: minmax(6rem, 30%) 1fr; gap: .25rem; align-items: start; }
+  .profile-card .field-name { font-weight: 600; color: #666; }
+  .profile-card .card-save { margin: .75rem .35rem 0; }
+  /* **도움말은 툴팁이다** — 커서를 올리거나 적는 동안 선다. 글자는 \`data-tip\`이 진다. */
+  .profile-card .tipped { position: relative; display: block; }
+  .profile-card .tipped::after { content: attr(data-tip); position: absolute; left: 0; top: 100%; z-index: 5; width: max-content;
+      max-width: min(18rem, 80vw); margin-top: .25rem; padding: .3rem .55rem; border-radius: .3rem; background: rgb(0 0 0 / 85%);
+      color: #fff; font-size: .75rem; font-weight: 400; line-height: 1.4; white-space: normal; pointer-events: none; opacity: 0;
+      transition: opacity .15s ease; }
+  @media (hover: hover) { .profile-card .tipped:hover::after { opacity: 1; } }
+  .profile-card .tipped:focus-within::after { opacity: 1; }
+  .profile-card .pick-header.tipped { position: absolute; }
+  .profile-card .pick-header.tipped::after { top: 3.1rem; right: .5rem; left: auto; margin: 0; }
+  .profile-card .pick-avatar.tipped { display: inline-block; }
+  .profile-card .pick-avatar.tipped::after { top: 50%; left: 100%; margin: 0 0 0 .5rem; transform: translateY(-50%); }
   .bots { list-style: none; padding: 0; }
   .bots li { border: 1px solid #ddd; border-radius: .3rem; padding: .8rem 1rem; margin: .6rem 0; }
   .bots a { font-weight: 600; }
@@ -193,6 +240,11 @@ export function page(title: string, body: string): string {
     .grave { border-top-color: #333; }
     small, dt { color: #9a9a9a; }
     .bots li, .list li { border-color: #333; }
+    fieldset.profile-card { border-color: #333; }
+    .profile-card .card-header { background: #2a2a2a; }
+    .profile-card .avatar { background: #161616; }
+    .profile-card .field-name { color: #9a9a9a; }
+    .profile-card .inline-edit:focus { border-color: #e8e8e8; background: #161616; color: #e8e8e8; }
     .tabs { border-bottom-color: #333; }
     .tabs a { color: #9a9a9a; }
     .tabs a[aria-current] { color: #e8e8e8; border-bottom-color: #e8e8e8; }
@@ -374,15 +426,32 @@ function shell(bot: BotRecord, current: BotTab, body: string, line?: string): st
     ${body}`);
 }
 
-/** 그림 칸 하나 — 지금 것을 보이고, 새 파일과 지우기를 받는다. 파일을 고르지 않으면 지금 것을 둔다. */
-function picture(name: 'avatar' | 'header', label: string, current: string | undefined, hint?: string): string {
-  const shown = current === undefined ? '' : `<img class="${name}" src="${escapeHtml(current)}" alt="">
-      <label class="choice"><input type="checkbox" name="clear_${name}" value="1"> ${label} 지우기</label>`;
+/** 그림 자리의 단추 둘 — 아이콘뿐이고 레이블은 눈에서만 감춘다(공용 규칙). 지우기는 지금 그림이 있을 때만 선다. */
+function pickButtons(kind: 'avatar' | 'header', label: string, current: string | undefined): string {
+  return `<span class="pick-actions">
+      <label class="pick-button" title="${label} 바꾸기">${ICON_IMAGE}<span class="sr-only">${label} 바꾸기</span>
+        <input class="sr-only" type="file" name="${kind}" accept="image/png,image/jpeg,image/gif,image/webp" data-pick-file="${kind}"></label>
+      ${current === undefined ? '' : `<label class="pick-button danger" title="${label} 지우기">${ICON_TRASH}<span class="sr-only">${label} 지우기</span>
+        <input class="sr-only" type="checkbox" name="clear_${kind}" value="1" data-pick-clear="${kind}"></label>`}
+    </span>`;
+}
 
-  return `<p class="picture"><label>${label}
-      <input name="${name}" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
-      ${shown}
-      <small>png·jpg·gif·webp, 10MB까지. 고르지 않으면 지금 것을 둡니다.${hint === undefined ? '' : ` ${hint}`}</small></p>`;
+const ICON_IMAGE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+const ICON_PERSON = '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+
+const IMAGE_TIP = 'png·jpg·gif·webp, 10MB까지. 고르지 않으면 지금 것을 둡니다.';
+
+/** 커스텀 필드 한 줄 — 이름과 값, 저마다 툴팁을 진다. */
+function fieldRow(field: { readonly name: string; readonly value: string }, at: number): string {
+  return `<div class="field-row">
+      <label class="sr-only" for="field-name-${String(at)}">필드 이름</label>
+      <span class="tipped" data-tip="이름을 비우면 그 줄이 지워집니다."><input class="inline-edit field-name" id="field-name-${String(at)}"
+        name="field_name" value="${escapeHtml(field.name)}" placeholder="이름" maxlength="${String(FIELD_MAX)}"></span>
+      <label class="sr-only" for="field-value-${String(at)}">필드 값</label>
+      <span class="tipped" data-tip="http로 시작하는 값은 링크가 됩니다."><textarea class="inline-edit field-value" id="field-value-${String(at)}"
+        name="field_value" rows="1" placeholder="값" maxlength="${String(FIELD_MAX)}" data-autosize>${escapeHtml(field.value)}</textarea></span>
+    </div>`;
 }
 
 /**
@@ -391,40 +460,130 @@ function picture(name: 'avatar' | 'header', label: string, current: string | und
  * 여기 적은 것이 **선언**(`manifest.json`)이 되고, 고치면 판이 오른다. 시에라는 임자가
  * *새 판 승인*을 눌러야 그것을 가져간다 — **여기서 고쳤다고 저쪽이 바뀌지 않는다.**
  *
- * **초상화와 배경은 파일로 올린다**(2026-10-08 요구 — ~~주소로 준다~~). 이 서비스가 맡아 **버전 있는
- * 공개 주소**(`/bots/{id}/images/{kind}/{hash}`)로 내주고 선언이 그 주소를 싣는다 — 코어는 승인할 때
- * 한 번 받아 자기 것으로 만든다(남의 주소를 걸면 프로필을 여는 사람마다 남의 서버에 발자국이 남는다).
- * 지우기 체크와 새 파일은 같은 칸이라 한 요청이다.
+ * **시에라의 프로필 카드와 같은 켜다**(2026-10-08 요구 — 하멜의 프로필 고치기와 같은 스펙). 헤더(배경 · 초상화 ·
+ * 이름) · 본문(소개 · 커스텀 필드)이고, **카드 하나가 저장 하나다**(공용 규칙). 그림의 단추는 아이콘뿐이고 커서를
+ * 올리면 선다 — 배경은 우상귀, 초상화는 가운데, 터치 화면에서는 그림을 눌러야 선다(`:focus-within`). 칸은 글자처럼
+ * 서 있다가 커서를 올리면 외곽선이 드러난다. 도움말은 툴팁이고, 소개와 값은 내용만큼 크며, 필드는 마지막 줄의
+ * 이름과 값이 둘 다 차면 다음 줄이 선다(`PROFILE`).
+ *
+ * **초상화와 배경은 파일로 올린다**(2026-10-08 — ~~주소로 준다~~). 이 서비스가 맡아 **버전 있는 공개 주소**
+ * (`/bots/{id}/images/{kind}/{hash}`)로 내주고 선언이 그 주소를 싣는다. 지우기 체크와 새 파일은 같은 자리라 한 요청이다.
+ *
+ * **커스텀 필드는 선언에 실린다**(2026-10-08 — 시에라의 `BotManifest.fields`). 한 번도 적지 않은 봇은 싣지 않는다.
  */
 export function profileTab(bot: BotRecord, line?: string): string {
   const connected = isConnected(bot);
+  const declared = bot.declaration;
+  const fields = declared.fields ?? [];
+  const rows = [...fields, ...(fields.length < FIELDS_MAX ? [{ name: '', value: '' }] : [])];
 
   return shell(bot, 'profile', `
     <form method="post" action="/bots/${bot.id}/declaration" enctype="multipart/form-data" data-wait="저장하는 중…">
-      <p><label>이름 <input name="name" required maxlength="60"
-        value="${escapeHtml(bot.declaration.name)}"></label></p>
-      <p><label>소개 <input name="summary" required maxlength="200"
-        value="${escapeHtml(bot.declaration.summary)}"></label></p>
-      ${picture('avatar', '초상화', bot.declaration.avatar, '없으면 시에라의 기본 얼굴이 섭니다.')}
-      ${picture('header', '배경', bot.declaration.header)}
+      <fieldset class="profile-card">
+        <legend class="sr-only">등록정보</legend>
+        <div class="card-header">
+          <div class="pick pick-header tipped" tabindex="0" data-pick="header" data-tip="${IMAGE_TIP}">
+            <img class="header" src="${escapeHtml(declared.header ?? '')}" alt="" data-preview="header"${declared.header === undefined ? ' hidden' : ''}>
+            ${pickButtons('header', '배경', declared.header)}
+          </div>
+          <div class="pick pick-avatar tipped" tabindex="0" data-pick="avatar" data-tip="${IMAGE_TIP} 없으면 시에라의 기본 얼굴이 섭니다.">
+            <img class="avatar" src="${escapeHtml(declared.avatar ?? '')}" alt="" data-preview="avatar"${declared.avatar === undefined ? ' hidden' : ''}>
+            <span class="avatar fallback" data-fallback="avatar"${declared.avatar === undefined ? '' : ' hidden'}>${ICON_PERSON}</span>
+            ${pickButtons('avatar', '초상화', declared.avatar)}
+          </div>
+          <div class="identity">
+            <label class="sr-only" for="bot-name">이름</label>
+            <input class="inline-edit display-name" id="bot-name" name="name" required maxlength="60" placeholder="이름"
+              value="${escapeHtml(declared.name)}">
+            ${bot.handle === undefined ? '' : `<code class="handle">@${escapeHtml(bot.handle)}</code>`}
+          </div>
+        </div>
+        <div class="card-body">
+          <label class="sr-only" for="bot-summary">소개</label>
+          <span class="tipped" data-tip="시에라 프로필의 소개가 됩니다."><textarea class="inline-edit summary" id="bot-summary" name="summary"
+            required maxlength="200" rows="2" placeholder="소개" data-autosize>${escapeHtml(declared.summary)}</textarea></span>
+          <fieldset class="fields" data-fieldrows data-max="${String(FIELDS_MAX)}">
+            <legend class="sr-only">커스텀 필드</legend>
+            ${rows.map(fieldRow).join('')}
+          </fieldset>
+          <p class="card-save"><button class="button" type="submit">저장한다</button></p>
+        </div>
+      </fieldset>
       ${connected
         ? `<p>붙은 시에라 <code>${escapeHtml(bot.origin)}</code>
            <small>이은 뒤에는 바꿀 수 없습니다 — 맡은 자격 증명이 그 시에라의 것입니다.</small></p>`
         : `<p><label>붙을 시에라 <input name="origin" required type="url"
            value="${escapeHtml(bot.origin)}"></label></p>`}
-      <p><button class="button" type="submit">저장한다</button></p>
       <small>고치면 선언의 판이 오릅니다 — 시에라에서 <b>새 판 승인</b>을 눌러야 그쪽에 섭니다.</small>
     </form>
-
-    <div class="grave todo">
-      <h2>커스텀 필드</h2>
-      <p><label>이름 <input placeholder="사는 곳" disabled></label></p>
-      <p><label>값 <input placeholder="어딘가" disabled></label></p>
-      <p><b>아직 서지 않았습니다.</b> 코어의 선언(<code>manifest.json</code>)이 지는 것은
-         이름·소개·초상화·배경·권한까지이고 <b>커스텀 필드를 아직 받지 않습니다</b> — 그 자리가
-         열리기 전에는 여기서 적어도 갈 곳이 없어 칸만 세워 둡니다.</p>
-    </div>`, line);
+    ${PROFILE}`, line);
 }
+
+/**
+ * **등록정보 카드를 거든다**(2026-10-08 — 하멜의 `behaviors`와 같은 일). 스크립트가 없어도 폼은 선다 — 그림은 파일 칸·
+ * 체크로, 필드는 서 있는 줄만큼.
+ *
+ * - 그림을 고르면 그 자리에서 미리 보이고, 지우기는 미리 걷는다(다시 풀면 원래 그림으로). 저장해야 선다.
+ * - `data-autosize` 칸은 내용만큼 큰다 — 스크롤바가 서지 않는다.
+ * - 커스텀 필드는 마지막 줄의 이름과 값이 **둘 다 차면** 그 아래가 선다(`data-max`까지).
+ */
+const PROFILE = `<script>(() => {
+  const fit = (area) => {
+    const style = getComputedStyle(area);
+    area.style.height = 'auto';
+    area.style.height = (area.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)) + 'px';
+  };
+  document.querySelectorAll('textarea[data-autosize]').forEach(fit);
+
+  document.addEventListener('change', (event) => {
+    const target = event.target;
+    const kind = target.dataset && (target.dataset.pickFile || target.dataset.pickClear);
+    const pick = kind && target.closest('[data-pick]');
+    if (!pick) return;
+    const preview = pick.querySelector('[data-preview="' + kind + '"]');
+    const fallback = pick.querySelector('[data-fallback="' + kind + '"]');
+    const clear = pick.querySelector('[data-pick-clear="' + kind + '"]');
+    const file = pick.querySelector('[data-pick-file="' + kind + '"]');
+    if (preview.dataset.original === undefined) preview.dataset.original = preview.getAttribute('src') || '';
+    const show = (src) => {
+      preview.hidden = !src;
+      if (src) preview.src = src;
+      if (fallback) fallback.hidden = !preview.hidden;
+    };
+    if (target.dataset.pickFile !== undefined) {
+      const chosen = target.files && target.files[0];
+      if (chosen) {
+        if (clear) { clear.checked = false; clear.closest('label').classList.remove('active'); }
+        show(URL.createObjectURL(chosen));
+      }
+      return;
+    }
+    target.closest('label').classList.toggle('active', target.checked);
+    if (target.checked) { if (file) file.value = ''; show(''); } else { show(preview.dataset.original); }
+  });
+
+  document.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLTextAreaElement && target.dataset.autosize !== undefined) fit(target);
+    const list = target.closest && target.closest('[data-fieldrows]');
+    if (!list) return;
+    const rows = [...list.querySelectorAll('.field-row')];
+    const last = rows[rows.length - 1];
+    if (!last || !last.contains(target) || rows.length >= Number(list.dataset.max)) return;
+    const cells = (row) => [...row.querySelectorAll('input, textarea')];
+    if (!cells(last).every((cell) => cell.value.trim() !== '')) return;
+    const next = last.cloneNode(true);
+    for (const cell of cells(next)) {
+      const old = cell.id;
+      cell.value = '';
+      if (cell.tagName === 'TEXTAREA') { cell.textContent = ''; cell.style.removeProperty('height'); }
+      cell.id = old.replace(/-\\d+$/, '-' + rows.length);
+      const label = next.querySelector('label[for="' + old + '"]');
+      if (label) label.htmlFor = cell.id;
+    }
+    last.after(next);
+  });
+})();</script>`;
 
 /**
  * **기능** — 그 봇 고유의 것.

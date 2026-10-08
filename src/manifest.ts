@@ -24,6 +24,8 @@ export interface ManifestView {
   readonly summary: string;
   readonly avatar?: string;
   readonly header?: string;
+  /** 커스텀 필드 — 선언에 적힌 것이 있을 때만 실린다(`BotDeclaration.fields`). */
+  readonly fields?: readonly { readonly name: string; readonly value: string }[];
   readonly scopes: readonly string[];
 
   /**
@@ -115,6 +117,7 @@ export function manifestOf(
     summary: bot.declaration.summary,
     ...(bot.declaration.avatar === undefined ? {} : { avatar: bot.declaration.avatar }),
     ...(bot.declaration.header === undefined ? {} : { header: bot.declaration.header }),
+    ...(bot.declaration.fields === undefined ? {} : { fields: bot.declaration.fields.map((one) => ({ ...one })) }),
     scopes: [...scopes],
 
     /*
@@ -133,5 +136,6 @@ export function declarationChanged(before: BotDeclaration, after: BotDeclaration
   return before.name !== after.name
     || before.summary !== after.summary
     || before.avatar !== after.avatar
-    || before.header !== after.header;
+    || before.header !== after.header
+    || JSON.stringify(before.fields) !== JSON.stringify(after.fields);
 }

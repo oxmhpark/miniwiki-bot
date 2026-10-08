@@ -37,11 +37,26 @@ export interface AccountRecord {
 }
 
 /** 봇이 자기를 말하는 것 — 그대로 선언(`manifest.json`)이 된다. */
+/** 커스텀 필드의 상한 — 시에라의 `profile.max_fields`·`profile.field_max_length` 기본과 같다. 넘으면 코어가 승인을 거절한다. */
+export const FIELDS_MAX = 4;
+export const FIELD_MAX = 255;
+
+/** 프로필의 커스텀 필드 한 줄 — 이름과 값. */
+export interface DeclaredField {
+  readonly name: string;
+  readonly value: string;
+}
+
 export interface BotDeclaration {
   readonly name: string;
   readonly summary: string;
   readonly avatar?: string;
   readonly header?: string;
+  /**
+   * 커스텀 필드(2026-10-08) — **없으면 선언에 싣지 않는다**: 시에라는 그때 필드를 그대로 두고, 빈 목록이면 지운다.
+   * 한 번도 적지 않은 봇이 판을 올렸다고 시에라에서 적어 둔 필드가 사라지지 않는다.
+   */
+  readonly fields?: readonly DeclaredField[];
 }
 
 export interface BotRecord {
