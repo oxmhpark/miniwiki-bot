@@ -160,6 +160,8 @@ export interface BotList {
     readonly fields: readonly BotField[];
   }[];
   readonly add: { readonly label: string; readonly fields: readonly BotField[] };
+  /** **칸 묶음보다 앞에 선다**(2026-10-09) — 기본은 뒤다. 그 장의 일이 목록에서 시작하는 봇이 고른다. */
+  readonly first?: boolean;
 }
 
 /**
@@ -510,8 +512,11 @@ function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: str
 
   const fields = grouped(view.fields ?? [], botId, tab);
 
-  const lists = (view.lists ?? []).map((one) => listHtml(one, botId, at, tab)).join('');
-  const listed = lists === '' ? '' : `${lists}${FOLD}`;
+  const draws = (first: boolean): string => (view.lists ?? [])
+    .filter((one) => (one.first === true) === first).map((one) => listHtml(one, botId, at, tab)).join('');
+  const before = draws(true);
+  const after = draws(false);
+  const fold = before === '' && after === '' ? '' : FOLD;
   const chips = [...(view.fields ?? []), ...(view.lists ?? []).flatMap((one) => [
     ...one.add.fields, ...one.items.flatMap((item) => item.fields),
   ])].some((one) => one.type === 'tokens');
@@ -528,7 +533,7 @@ function section(view: Omit<PanelTab, 'name' | 'label'>, botId: string, tab: str
   const plain = buttons.filter((one) => one.grave !== true).map(draw).join('');
   const grave = buttons.filter((one) => one.grave === true).map(draw).join('');
 
-  return `${facts}${fields}${listed}${chips ? CHIPS : ''}${plain}
+  return `${facts}${before}${fields}${after}${fold}${chips ? CHIPS : ''}${plain}
     ${grave === '' ? '' : `<div class="grave">${grave}</div>`}`;
 }
 

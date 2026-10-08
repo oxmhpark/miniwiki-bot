@@ -98,6 +98,22 @@ describe('목록', () => {
   });
 });
 
+describe('목록의 자리', () => {
+  const list = {
+    name: 'repos', label: '저장소', items: [],
+    add: { label: '저장소 추가', fields: [{ type: 'text' as const, name: 'url', label: '주소', value: '' }] },
+  };
+  const fields = [{ type: 'text' as const, name: 'x', label: 'x', value: '', group: '동작 설정' }];
+
+  it('기본은 칸 묶음 뒤, `first`면 앞이다', () => {
+    const after = renderPanel({ fields, lists: [list] }, 'b1');
+    expect(after.indexOf('동작 설정')).toBeLessThan(after.indexOf('저장소 추가'));
+
+    const before = renderPanel({ fields, lists: [{ ...list, first: true }] }, 'b1');
+    expect(before.indexOf('저장소 추가')).toBeLessThan(before.indexOf('동작 설정'));
+  });
+});
+
 describe('서브탭', () => {
   const view = {
     tabs: [
