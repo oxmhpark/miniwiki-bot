@@ -103,3 +103,13 @@ describe('cannotAttach — 붙을 수 없다는 거절(코어 M66 확정 3)', ()
     expect(cannotAttach(new Error('끊겼다'))).toBeUndefined();
   });
 });
+
+describe('SierraError.retryAfter — 오류 값은 error_params에 있다', () => {
+  it('한도의 기다림은 error_params에서 읽는다 — 최상위에는 없다', () => {
+    const limited = new SierraError(429, JSON.stringify({ error: 'rate_limited', error_params: { retry_after: 1800, limit: 300 } }));
+    expect(limited.retryAfter).toBe(1800);
+    expect(limited.params?.['limit']).toBe(300);
+    expect(new SierraError(429, JSON.stringify({ error: 'rate_limited', retry_after: 30 })).retryAfter).toBeUndefined();
+    expect(new SierraError(502, '<html>bad gateway</html>').retryAfter).toBeUndefined();
+  });
+});

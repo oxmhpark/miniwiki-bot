@@ -417,24 +417,30 @@ export class SierraError extends Error {
     }
   }
 
-  /** `bot_requires_extension`의 `missing`(코어 M66 확정 3) — 다른 거절이면 `undefined`. */
-  get missing(): readonly MissingExtension[] | undefined {
+  /**
+   * 코어의 오류 값(`error_params` — `ERRORS.md`). 본문이 JSON이 아니거나 값이 없으면 `undefined`.
+   *
+   * **값은 이 칸에만 있다** — 오류 봉투는 `{ error, error_params }`다(코어 2026-08-09). 다른 API처럼 최상위에서
+   * 찾으면 늘 비어 있고, 부르는 쪽의 대비값이 그것을 가린다(`retryAfter`가 그랬다 — 2026-10-09).
+   */
+  get params(): Readonly<Record<string, unknown>> | undefined {
     try {
-      const parsed = JSON.parse(this.body) as { readonly error_params?: { readonly missing?: readonly MissingExtension[] } };
-      return parsed.error_params?.missing;
+      const parsed = JSON.parse(this.body) as { readonly error_params?: Readonly<Record<string, unknown>> };
+      return parsed.error_params;
     } catch {
       return undefined;
     }
   }
 
-  /** `429 rate_limited`의 `retry_after`(초). */
+  /** `bot_requires_extension`의 `missing`(코어 M66 확정 3) — 다른 거절이면 `undefined`. */
+  get missing(): readonly MissingExtension[] | undefined {
+    return this.params?.['missing'] as readonly MissingExtension[] | undefined;
+  }
+
+  /** `429`(`rate_limited`·`chat_rate_limited`)의 `retry_after`(초). */
   get retryAfter(): number | undefined {
-    try {
-      const parsed = JSON.parse(this.body) as { readonly retry_after?: number };
-      return parsed.retry_after;
-    } catch {
-      return undefined;
-    }
+    const value = this.params?.['retry_after'];
+    return typeof value === 'number' ? value : undefined;
   }
 }
 
