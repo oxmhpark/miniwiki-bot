@@ -18,6 +18,18 @@ export const DEFAULT_SCOPES = [
   'read:accounts',
 ] as const;
 
+/**
+ * **이 봇이 붙으려면 시에라에 있어야 하는 확장**(코어 M66 확정 3, 2026-10-09 요구).
+ *
+ * 코어가 설치·새 판 승인·다시 읽기에서 실린 확장과 견주고, 없거나 판이 범위 밖이면 `bot_requires_extension`으로
+ * 거절한다. `version`은 `1.1.0`·`>=`·`>`·`<=`·`<`·`^`·`~`를 공백으로 이은 범위이고, 비면 어느 판이든 지난다.
+ * 실린 확장과 판은 `GET /api/v1/instance`의 `extensions`에 있다.
+ */
+export interface BotRequirement {
+  readonly name: string;
+  readonly version?: string;
+}
+
 export interface ManifestView {
   readonly version: string;
   readonly name: string;
@@ -38,6 +50,8 @@ export interface ManifestView {
   readonly commands?: readonly (BotCommand & { readonly groups?: readonly string[]; readonly denied?: string })[];
   readonly tags?: BotGates['tags'];
   readonly audience?: BotGates['audience'];
+  /** 필요한 시에라 확장 — **없으면 칸째로 빠진다**(옛 코어·요구 없는 봇은 지금처럼 선다). */
+  readonly requires?: readonly BotRequirement[];
 }
 
 /**
@@ -101,6 +115,7 @@ export function manifestOf(
   scopes: readonly string[] = DEFAULT_SCOPES,
   commands?: readonly BotCommand[],
   gates?: BotGates,
+  requires?: readonly BotRequirement[],
 ): ManifestView {
   const declared = commands === undefined ? undefined : declare(commands).map((one) => {
     const gate = gates?.commands?.[one.name];
@@ -128,6 +143,7 @@ export function manifestOf(
     ...(declared === undefined ? {} : { commands: declared }),
     ...((gates?.tags ?? []).length === 0 ? {} : { tags: gates?.tags }),
     ...(gates?.audience === undefined || (gates.audience.groups ?? []).length === 0 ? {} : { audience: gates.audience }),
+    ...(requires === undefined || requires.length === 0 ? {} : { requires: requires.map((one) => ({ ...one })) }),
   };
 }
 

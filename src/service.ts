@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { BotCommand } from './commands.js';
 import { readConfig } from './config.js';
 import { Sealer } from './crypto.js';
-import { DEFAULT_SCOPES, type BotGates } from './manifest.js';
+import { DEFAULT_SCOPES, type BotGates, type BotRequirement } from './manifest.js';
 import type { BotPanel } from './panel.js';
 import type { BotBrain } from './runner.js';
 import { Fleet } from './runner.js';
@@ -55,6 +55,12 @@ export interface ServiceOptions {
 
   /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
   readonly panel?: BotPanel;
+
+  /**
+   * **이 봇이 붙으려면 시에라에 있어야 하는 확장**(코어 M66 확정 3) — `[{ name: 'sierrachat', version: '>=1.1.0' }]`.
+   * 선언에 실려 코어가 설치·승인에서 견준다. 주지 않으면 어느 시에라에나 붙는다.
+   */
+  readonly requires?: readonly BotRequirement[];
 }
 
 const log = (line: string): void => {
@@ -144,6 +150,7 @@ export async function startService(options: ServiceOptions): Promise<void> {
     scopes: options.scopes ?? DEFAULT_SCOPES,
     ...(options.commands === undefined ? {} : { commands: options.commands }),
     ...(options.gates === undefined ? {} : { gates: options.gates }),
+    ...(options.requires === undefined ? {} : { requires: options.requires }),
     serviceName: name,
     about: about === undefined ? '' : renderMarkdown(withoutTitle(about)),
     ...(options.panel === undefined ? {} : { panel: options.panel }),

@@ -39,3 +39,14 @@ describe('manifestOf — 봇의 문(코어 M61)', () => {
     expect(view.audience).toBeUndefined();
   });
 });
+
+describe('manifestOf — 필요한 확장(코어 M66 확정 3)', () => {
+  it('requires가 선언에 실리고, 없으면 칸째로 빠진다', () => {
+    const view = manifestOf(BOT, '0.4.1', [], undefined, undefined, [{ name: 'sierrachat', version: '>=1.1.0' }]);
+    expect(view.requires).toEqual([{ name: 'sierrachat', version: '>=1.1.0' }]);
+    expect(view.version).toBe('0.4.1+3');
+
+    expect('requires' in manifestOf(BOT, '0.4.1', [], undefined, undefined)).toBe(false);
+    expect('requires' in manifestOf(BOT, '0.4.1', [], undefined, undefined, [])).toBe(false);
+  });
+});

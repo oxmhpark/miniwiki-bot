@@ -4,7 +4,7 @@ import type { GithubApp } from './auth.js';
 import { authorizeUrl, exchange, welcome } from './auth.js';
 import type { Sealer } from './crypto.js';
 import type { BotCommand } from './commands.js';
-import { declarationChanged, manifestOf, type BotGates } from './manifest.js';
+import { declarationChanged, manifestOf, type BotGates, type BotRequirement } from './manifest.js';
 import type { BotTab } from './pages.js';
 import {
   advancedTab, authTab, deletePage, featuresTab, homePage, landingPage, newBotPage,
@@ -12,7 +12,7 @@ import {
 } from './pages.js';
 import { fillHidden, renderPanel, type BotPanel } from './panel.js';
 import type { Fleet } from './runner.js';
-import { SierraClient, SierraError } from './sierra.js';
+import { cannotAttach, SierraClient, SierraError } from './sierra.js';
 import type { AccountRecord, BotDeclaration, BotRecord, FileStore, ImageKind } from './state.js';
 import { FIELD_MAX, FIELDS_MAX, isConnected } from './state.js';
 import { escapeHtml } from './text.js';
@@ -75,6 +75,9 @@ export interface WebOptions {
   /** 봇의 문 — 선언에 실어 코어가 거른다(코어 M61). 봇마다 다르다. */
   readonly gates?: (bot: BotRecord, store: FileStore) => Promise<BotGates | undefined>;
 
+  /** 필요한 시에라 확장 — 선언에 실린다(코어 M66 확정 3). 없으면 그 칸이 빠진다. */
+  readonly requires?: readonly BotRequirement[];
+
   /** 화면의 제목줄에 서는 이름 — *아무개의 **에코***. */
   readonly serviceName: string;
   /** 첫 화면의 본문 — 그 봇의 `ABOUT.md`를 그린 것. 없으면 빈 문자열이다. */
@@ -123,7 +126,7 @@ async function handle(
 
     const gates = await options.gates?.(bot, options.store);
     const body = JSON.stringify(
-      manifestOf(bot, options.codeVersion, options.scopes, options.commands, gates), null, 2);
+      manifestOf(bot, options.codeVersion, options.scopes, options.commands, gates, options.requires), null, 2);
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(body);
     return;
   }
@@ -292,6 +295,11 @@ async function handle(
           line = `${line ?? '저장했다'} — 시에라 임자에게 새 판을 알렸다`;
         }
       } catch (error) {
+        // **붙을 수 없다는 거절만은 임자에게 말한다**(코어 M66 확정 3) — 저장은 섰지만 시에라에서 서지 않는다.
+        const refused = cannotAttach(error);
+        if (refused !== undefined) {
+          line = `${line ?? '저장했다'} — ${refused}`;
+        }
         options.log(`[${bot.handle ?? bot.id}] 선언을 다시 읽히지 못했다: ${(error as Error).message}`);
       }
     }
@@ -541,17 +549,21 @@ async function editDeclaration(
    * 못 불러도 저장은 섰다 — 옛 코어이거나 시에라가 잠깐 닿지 않을 수 있다.
    */
   let noticed = false;
+  let refused: string | undefined;
   if (moved && isConnected(bot) && bot.sealedClientSecret !== undefined) {
     try {
       noticed = (await options.fleet.contextOf(saved).sierra.refreshManifest()).noticed === true;
     } catch (error) {
+      refused = cannotAttach(error);
       options.log(`[${bot.handle ?? bot.id}] 선언을 다시 읽히지 못했다: ${(error as Error).message}`);
     }
   }
 
-  back(response, bot.id, 'profile', moved && isConnected(bot)
-    ? `고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다${noticed ? ' — 임자에게 알렸습니다.' : '.'}`
-    : '고쳤습니다.');
+  back(response, bot.id, 'profile', refused !== undefined
+    ? `고쳤습니다. 다만 ${refused}.`
+    : moved && isConnected(bot)
+      ? `고쳤습니다. 시에라에서 새 판을 승인해야 그쪽에 섭니다${noticed ? ' — 임자에게 알렸습니다.' : '.'}`
+      : '고쳤습니다.');
 }
 
 /**

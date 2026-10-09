@@ -373,6 +373,34 @@ interface TokenResponse {
 /** 토큰은 짧고 회전이 없다(M22). **만료 30초 전에 갈아 끼운다.** */
 const RENEW_MARGIN_MS = 30 * 1000;
 
+/**
+ * 이 시에라에서 서지 못하는 요구 하나 — `bot_requires_extension`의 `missing`(코어 M66 확정 3).
+ * `installed`가 없으면 확장이 아예 없고, 있으면 판이 범위 밖이다.
+ */
+export interface MissingExtension {
+  readonly name: string;
+  readonly version?: string;
+  readonly installed?: string;
+}
+
+/**
+ * **붙을 수 없다는 거절을 사람 말로** — 그 거절이 아니면 `undefined`.
+ *
+ * 봇 화면이 설정·등록정보를 저장한 뒤 코어가 선언을 다시 읽다가 이것으로 거절하면, 임자는 *왜 새 판이 서지
+ * 않는가*를 여기서 처음 안다 — 로그에만 남기면 시에라 쪽 화면을 열기 전까지 모른다.
+ */
+export function cannotAttach(error: unknown): string | undefined {
+  if (!(error instanceof SierraError) || error.key !== 'bot_requires_extension') {
+    return undefined;
+  }
+
+  const names = (error.missing ?? []).map((one) =>
+    `${one.name}${one.version === undefined ? '' : ` ${one.version}`}${
+      one.installed === undefined ? ' (없음)' : ` (지금 ${one.installed})`}`);
+
+  return `이 시에라에는 봇이 필요로 하는 확장이 없어 붙을 수 없다${names.length === 0 ? '' : ` — ${names.join(', ')}`}`;
+}
+
 export class SierraError extends Error {
   constructor(readonly status: number, readonly body: string) {
     super(`시에라가 ${status}로 답했습니다: ${body.slice(0, 200)}`);
@@ -384,6 +412,16 @@ export class SierraError extends Error {
     try {
       const parsed = JSON.parse(this.body) as { readonly error?: string };
       return parsed.error;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** `bot_requires_extension`의 `missing`(코어 M66 확정 3) — 다른 거절이면 `undefined`. */
+  get missing(): readonly MissingExtension[] | undefined {
+    try {
+      const parsed = JSON.parse(this.body) as { readonly error_params?: { readonly missing?: readonly MissingExtension[] } };
+      return parsed.error_params?.missing;
     } catch {
       return undefined;
     }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SierraClient } from './sierra.js';
+import { cannotAttach, SierraClient, SierraError } from './sierra.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,5 +83,23 @@ describe('query', () => {
       post_id: 'p2', body: '/ask claude -- 안녕', prompt: '짧게',
       media: { max_count: 2, max_bytes: 1000 }, tools: { mode: 'read', write_paths: [] },
     });
+  });
+});
+
+describe('cannotAttach — 붙을 수 없다는 거절(코어 M66 확정 3)', () => {
+  it('빠진 확장과 판을 사람 말로 옮긴다', () => {
+    const error = new SierraError(400, JSON.stringify({
+      error: 'bot_requires_extension',
+      error_params: { missing: [{ name: 'sierrachat', version: '>=1.2.0', installed: '1.1.0' }, { name: 'nosuch' }] },
+    }));
+
+    expect(error.missing).toHaveLength(2);
+    expect(cannotAttach(error)).toBe(
+      '이 시에라에는 봇이 필요로 하는 확장이 없어 붙을 수 없다 — sierrachat >=1.2.0 (지금 1.1.0), nosuch (없음)');
+  });
+
+  it('다른 거절이면 말하지 않는다', () => {
+    expect(cannotAttach(new SierraError(400, JSON.stringify({ error: 'manifest_unreachable' })))).toBeUndefined();
+    expect(cannotAttach(new Error('끊겼다'))).toBeUndefined();
   });
 });
