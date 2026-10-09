@@ -59,3 +59,29 @@ describe('federates', () => {
     expect(await client().federates()).toBeUndefined();
   });
 });
+
+describe('query', () => {
+  it('글 id와 멘션 뗀 말을 싣고, 주지 않은 칸은 빼고, 코어의 답을 그대로 돌려준다', async () => {
+    const sent: { url: string; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/oauth/token')) {
+        return new Response(JSON.stringify({ access_token: 't', expires_in: 3600 }));
+      }
+      sent.push({ url, body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify({ answer: { text: '답', html: '<p>답</p>', service: 'anthropic', model: 'm' } }));
+    });
+
+    const client = new SierraClient({ origin: 'https://s.test', clientId: 'c', clientSecret: 's' });
+    const plain = await client.query('p1', '안녕');
+    await client.query('p2', '/ask claude -- 안녕', {
+      prompt: '짧게', media: { max_count: 2, max_bytes: 1000 }, tools: { mode: 'read', write_paths: [] },
+    });
+
+    expect(plain.answer?.service).toBe('anthropic');
+    expect(sent[0]).toEqual({ url: 'https://s.test/api/v1/bots/me/query', body: { post_id: 'p1', body: '안녕' } });
+    expect(sent[1]?.body).toEqual({
+      post_id: 'p2', body: '/ask claude -- 안녕', prompt: '짧게',
+      media: { max_count: 2, max_bytes: 1000 }, tools: { mode: 'read', write_paths: [] },
+    });
+  });
+});

@@ -102,8 +102,8 @@ type FieldShape =
       /**
        * **비밀 칸** — 봇 임자가 맡기는 열쇠(저장소 토큰 따위, 2026-10-06 요구).
        *
-       * 맡기는 칸(`IntakeField`의 `secret`)과 같은 규약이다: **적은 것이 화면으로 돌아오지
-       * 않고**, 이미 맡긴 것이 있으면 `filled`로 그 사실만 말하며, **빈 채로 내면 그대로 둔다**.
+       * **적은 것이 화면으로 돌아오지 않고**, 이미 맡긴 것이 있으면 `filled`로 그 사실만 말하며,
+       * **빈 채로 내면 그대로 둔다**.
        * 봉하는 일은 봇의 몫이다(`ctx.sealer`).
        */
       readonly type: 'secret';
@@ -291,7 +291,7 @@ function field(one: BotField): string {
   }
 
   if (one.type === 'secret') {
-    // 값을 싣지 않는다 — 봉한 것이 화면으로 돌아오지 않게(`intake.ts`와 같은 까닭).
+    // 값을 싣지 않는다 — 봉한 것이 화면으로 돌아오면 봉한 뜻이 없다.
     const filled = one.filled === true ? '<small>이미 맡긴 것이 있습니다 — 비워 두면 그대로 둡니다.</small>' : '';
 
     return `<p><label>${esc(one.label)}

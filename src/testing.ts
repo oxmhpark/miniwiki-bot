@@ -37,6 +37,7 @@ export function fakeSierra(given: Partial<Sierra> = {}): Sierra {
     lastPost: given.lastPost ?? unused('lastPost'),
     membership: given.membership ?? unused('membership'),
     refreshManifest: given.refreshManifest ?? unused('refreshManifest'),
+    query: given.query ?? unused('query'),
   };
 }
 

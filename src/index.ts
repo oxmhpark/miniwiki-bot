@@ -7,7 +7,7 @@
  *
  * **내보내지 않는 것**: `web.ts` · `pages.ts` · `auth.ts` · `markdown.ts`. 화면과 문은
  * 이 라이브러리가 통째로 지는 것이라 봇이 손댈 자리가 아니다 — 봇이 화면에 더할 것은
- * `BotPanel`과 `BotIntake`로 **선언한다**.
+ * `BotPanel`로 **선언한다**.
  */
 
 export { startService } from './service.js';
@@ -15,7 +15,6 @@ export type { ServiceOptions } from './service.js';
 
 export * from './runner.js';
 export * from './panel.js';
-export * from './intake.js';
 export * from './state.js';
 export * from './sierra.js';
 export * from './crypto.js';
@@ -24,4 +23,3 @@ export * from './tickets.js';
 export * from './config.js';
 export * from './manifest.js';
 export * from './commands.js';
-export * from './tools.js';

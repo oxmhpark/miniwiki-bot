@@ -121,7 +121,7 @@ export interface ThreadItem {
   readonly created_at?: string;
 }
 
-/** 코어의 응답 그대로 — 도구가 읽고 줄인다(`tools.ts`). 칸을 여기서 다 적지 않는다: 코어가 칸을 늘려도 봇이 따라 고칠 일이 없다. */
+/** 코어의 응답 그대로 — 부르는 쪽이 읽고 줄인다. 칸을 여기서 다 적지 않는다: 코어가 칸을 늘려도 봇이 따라 고칠 일이 없다. */
 export type JsonRecord = Readonly<Record<string, unknown>>;
 
 /**
@@ -134,6 +134,66 @@ export interface ManifestRefresh {
   readonly noticed?: boolean;
 }
 
+/**
+ * **봇의 질의 문**에 싣는 것 — `POST /api/v1/bots/me/query`(sierrachat, 모체 M66 · 2026-10-09).
+ *
+ * 봇은 키를 모른다 — 코어가 **말 거는 사람의 키링**으로 모델을 부르고, 쓰레드도 그 사람의 시야로 읽는다.
+ * 말 거는 사람은 `postId`의 글쓴이이고, 코어는 그 글이 이 봇을 불렀는지 확인한다(그 글 id가 곧 *그 사람이 부른
+ * 일*의 증거다). 스코프 `chat:query`가 든다 — 선언이 청하고 시에라 임자가 승인한다.
+ */
+export interface QueryOptions {
+  /** 그 사람이 덧붙인 프롬프트 — 봇의 성격(등록정보) 뒤에 선다. */
+  readonly prompt?: string;
+  /** 부른 글의 첨부를 모델에게 보내는 한도 — 코어가 미디어를 직접 읽는다. `max_count: 0`이면 보내지 않는다. */
+  readonly media?: { readonly max_count: number; readonly max_bytes: number };
+  /** 시에라 도구 — 말 거는 사람의 시야와 권한으로 돈다. 쓰기는 `write_paths` 아래만. */
+  readonly tools?: { readonly mode: 'off' | 'read' | 'write'; readonly write_paths: readonly string[] };
+}
+
+/**
+ * 모델의 답 — `text`(마크다운)·`html`(코어가 구운 것), 실패면 `error`(문장이 아니라 키다 — 말은 봇이 짓는다).
+ * `wrote`는 도구가 고친 문서의 경로, `skipped_media`는 한도 밖이라 보내지 않은 첨부의 수.
+ */
+export type QueryAnswer =
+  | {
+      readonly text: string;
+      readonly html: string;
+      readonly service: string;
+      readonly model: string;
+      readonly wrote?: readonly string[];
+      readonly skipped_media?: number;
+      readonly error?: undefined;
+    }
+  | {
+      readonly error: QueryError;
+      readonly service: string;
+      readonly model: string;
+    };
+
+/** `answer.error`의 키들 — 코어가 늘리면 모르는 키도 올 수 있다(`string`). */
+export type QueryError =
+  | 'insufficient_credit' | 'key_rejected' | 'service_rate_limited' | 'model_not_found'
+  | 'refused' | 'service_error' | 'no_key' | 'interrupted' | (string & {});
+
+/**
+ * 모델을 부르지 않고 코어가 답한 것 — 명령(`/model`·`/help`)의 답이거나 부를 수 없는 사정. 낱말은 봇이 짓는다.
+ */
+export type QueryNotice =
+  | { readonly kind: 'models'; readonly service: string; readonly current?: string; readonly models: readonly string[] }
+  | { readonly kind: 'model_set'; readonly service: string; readonly model: string }
+  | { readonly kind: 'help'; readonly commands: readonly { readonly name: string; readonly aliases?: readonly string[]; readonly args?: string }[] }
+  | { readonly kind: 'no_key'; readonly service?: string }
+  | { readonly kind: 'keyring_not_granted'; readonly bot?: string }
+  | { readonly kind: 'unknown_service'; readonly given: string }
+  | { readonly kind: 'unknown_model'; readonly service: string; readonly given: string }
+  | { readonly kind: 'quota'; readonly limit: number }
+  | { readonly kind: 'empty_query' };
+
+/** 질의 문의 답 — 둘 중 하나가 선다. */
+export type QueryResult =
+  | { readonly answer: QueryAnswer; readonly notice?: undefined }
+  | { readonly notice: QueryNotice; readonly answer?: undefined };
+
 /** 봇이 코어에 하는 일 — **검사가 이 자리를 대신 채운다**. */
 export interface Sierra {
   /** 나 — 아이디와 id. */
@@ -142,7 +202,7 @@ export interface Sierra {
   /** `post.max_length` — 익명으로 열리는 `/api/v1/instance`에서. 없으면 20000. */
   maxPostLength(): Promise<number>;
 
-  // ── 도구가 쓰는 읽기·쓰기 (2026-10-08 — `tools.ts`, 모델이 시에라를 도구로 쓴다) ──────────
+  // ── 글·사람·문서의 읽기·쓰기 (2026-10-08 — v0.23의 도구가 쓰던 문. 도구는 v0.26에 코어로 갔다) ──
   // **봇 계정으로 읽는다** — 봇이 볼 수 있는 것을 본다(코어의 판정 그대로).
 
   /** 글 검색 — `GET /api/v1/search`(문법: `from:` `tag:` `before:` `after:` `"구"` `~부정`). `read:feeds`. */
@@ -288,6 +348,15 @@ export interface Sierra {
    * 그룹마다 `true`/`false`, **없는 그룹은 `null`**. 프로필의 `groups`와 달리 뱃지를 끈 그룹도 답한다.
    */
   membership(accountId: string, groups: readonly string[]): Promise<Readonly<Record<string, boolean | null>>>;
+
+  /**
+   * **말 거는 사람의 키링으로 묻는다** — `POST /api/v1/bots/me/query`(sierrachat, 모체 M66).
+   *
+   * `body`는 멘션을 뗀 말이다. 코어가 채팅방과 같은 명령 읽기를 지난다 — `/model`·`/help`·`/ask`는 명령이고 아니면
+   * 질의다. **동기다** — 모델이 답할 때까지 기다린다. 스코프 `chat:query`가 없거나 그 글이 이 봇을 부르지 않았으면
+   * 403(`chat_query_not_invoked`·`chat_query_remote`)으로 던진다.
+   */
+  query(postId: string, body: string, options?: QueryOptions): Promise<QueryResult>;
 
   /**
    * **제 선언을 코어가 다시 읽게 한다** — 트리거의 그룹이 그대로면 승인 없이 선다(코어 M61 확정 4).
@@ -477,6 +546,16 @@ export class SierraClient implements Sierra {
   ): Promise<Readonly<Record<string, boolean | null>>> {
     const query = new URLSearchParams({ groups: groups.join(',') });
     return await this.send('GET', `/api/v1/bots/me/membership/${encodeURIComponent(accountId)}?${query}`);
+  }
+
+  async query(postId: string, body: string, options: QueryOptions = {}): Promise<QueryResult> {
+    return await this.send('POST', '/api/v1/bots/me/query', {
+      post_id: postId,
+      body,
+      ...(options.prompt === undefined ? {} : { prompt: options.prompt }),
+      ...(options.media === undefined ? {} : { media: options.media }),
+      ...(options.tools === undefined ? {} : { tools: options.tools }),
+    });
   }
 
   async refreshManifest(): Promise<ManifestRefresh> {

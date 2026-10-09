@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashtags, postIdOf, tagKey } from './text.js';
+import { hashtags, normalPath, postIdOf, tagKey } from './text.js';
 
 describe('postIdOf', () => {
   it('href의 끝마디에서 글의 id를 뽑는다 — 없으면 undefined', () => {
@@ -27,5 +27,13 @@ describe('hashtags · tagKey — 코어의 HashtagSyntax와 같은 규칙', () =
     expect(tagKey(' 무작위 복제 ')).toBe('무작위_복제');
     expect(tagKey('#123')).toBeUndefined();
     expect(tagKey('가'.repeat(140))).toBeUndefined();
+  });
+});
+
+describe('normalPath', () => {
+  it('앞에 /를 두고 뒤의 /와 빈 마디를 뗀다', () => {
+    expect(normalPath('채토/메모/')).toBe('/채토/메모');
+    expect(normalPath(' /채토// 메모 ')).toBe('/채토/메모');
+    expect(normalPath('/')).toBe('/');
   });
 });

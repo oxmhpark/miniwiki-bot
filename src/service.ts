@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import type { BotCommand } from './commands.js';
 import { readConfig } from './config.js';
 import { Sealer } from './crypto.js';
-import type { BotIntake, ConnectTicket } from './intake.js';
 import { DEFAULT_SCOPES, type BotGates } from './manifest.js';
 import type { BotPanel } from './panel.js';
 import type { BotBrain } from './runner.js';
@@ -10,7 +9,6 @@ import { Fleet } from './runner.js';
 import type { BotRecord } from './state.js';
 import { FileStore } from './state.js';
 import { renderMarkdown, withoutTitle } from './markdown.js';
-import { Tickets } from './tickets.js';
 import { createWebServer } from './web.js';
 
 /**
@@ -57,13 +55,6 @@ export interface ServiceOptions {
 
   /** 봇 화면에 더할 칸 — 그 봇의 설정과 단추가 여기 선다. */
   readonly panel?: BotPanel;
-
-  /**
-   * **말 거는 사람이 무언가를 맡기는 자리**(`/connect/{티켓}`).
-   *
-   * 주지 않으면 그 주소는 404다 — 아무것도 맡을 것이 없는 봇(에코)이 그렇다.
-   */
-  readonly intake?: BotIntake;
 }
 
 const log = (line: string): void => {
@@ -117,14 +108,6 @@ export async function startService(options: ServiceOptions): Promise<void> {
   const store = new FileStore(config.stateDir);
   const sealer = new Sealer(config.secret, 'bot/v1');
 
-  /*
-   * **연결 링크의 표는 하나다** — 봇이 내고 화면이 받는다.
-   *
-   * 봇 쪽과 화면 쪽이 따로 쥐면 방금 보낸 링크를 화면이 모른다. 메모리에만 있고(`tickets.ts`)
-   * 다시 뜨면 죽지만, 그래도 되는 까닭은 **다시 말을 걸면 새 링크가 오기** 때문이다.
-   */
-  const tickets = new Tickets<ConnectTicket>();
-
   const fleet = new Fleet({
     store,
     sealer,
@@ -133,7 +116,6 @@ export async function startService(options: ServiceOptions): Promise<void> {
     pollMs: config.pollMs,
     log,
     brain: options.brain,
-    tickets,
   });
 
   /*
@@ -165,8 +147,6 @@ export async function startService(options: ServiceOptions): Promise<void> {
     serviceName: name,
     about: about === undefined ? '' : renderMarkdown(withoutTitle(about)),
     ...(options.panel === undefined ? {} : { panel: options.panel }),
-    ...(options.intake === undefined ? {} : { intake: options.intake }),
-    tickets,
     log,
   });
 

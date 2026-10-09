@@ -111,3 +111,12 @@ export function hashtags(body: string | null | undefined): readonly string[] {
 
   return found;
 }
+
+/**
+ * 문서 경로를 하나의 모양으로 — 앞에 `/`, 뒤의 `/`는 뗀다. 봇 화면이 받은 경로(채토의 쓰기 허용 경로)를 이 꼴로
+ * 적어 둔다(v0.23 `tools.ts`에서 왔다 — 도구는 v0.26에 코어로 갔다).
+ */
+export function normalPath(path: string): string {
+  const inner = path.split('/').map((one) => one.trim()).filter((one) => one !== '').join('/');
+  return `/${inner}`;
+}
