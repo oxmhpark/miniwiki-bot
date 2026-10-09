@@ -43,9 +43,11 @@
 
 ```sh
 npm run typecheck && npm test              # 도커로 돈다 — 이 기계에 node가 없다
-npm version minor                          # package.json과 태그가 함께 오른다
-git push --follow-tags origin main
+./release.sh minor                         # 컨테이너의 npm version — package.json·잠금·커밋·태그, 그리고 push --follow-tags
 ```
+
+**손으로 판을 올리지 않는다**(2026-10-10). node가 없어 `package.json`만 고치고 `git tag`를 치던 사이 잠금 파일의 판 표기가
+0.23.0에 멈췄다(0.23.1 ~ 0.27.2). `release.sh`가 `npm version`을 컨테이너에서 돌린다.
 
 **봇은 태그로 받고 락파일에는 커밋 sha가 박힌다** — 태그를 옮겨도 봇은 받던 것을 계속 받는다.
 그래서 **낸 태그는 옮기지 않는다**: 고칠 것이 있으면 다음 판을 낸다.

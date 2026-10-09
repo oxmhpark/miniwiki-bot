@@ -218,7 +218,7 @@ cp -r node_modules/miniwiki-bot/template/. .     # Dockerfile · compose · mani
 > 때문에 `vendor/`를 최종 이미지에 함께 옮겨야 했고, `npm prune`이 링크된 패키지의 `prepare`를
 > 다시 돌려 `--ignore-scripts`가 필요했다. **라이브러리를 공개로 바꾸면서 그 둘 다 사라졌다.**
 
-- **판은 태그다.** 라이브러리에서 `npm version minor && git push --follow-tags`, 봇에서
+- **판은 태그다.** 라이브러리에서 `./release.sh minor`(컨테이너의 `npm version` + `push --follow-tags`), 봇에서
   `npm install miniwiki-bot@github:oxmhpark/miniwiki-bot#v0.6.0`.
 - **`package-lock.json`에 커밋 sha가 박힌다** — 태그를 옮겨도 봇은 받던 것을 계속 받는다.
 - **`dist`는 저장소에 없다.** 설치할 때 라이브러리의 `prepare`가 `tsc`를 돌려 만든다.
